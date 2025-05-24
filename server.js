@@ -119,18 +119,27 @@ io.on('connection', (socket) => {
     socket.on('move', (data) => {
         const player = gameState.players.get(socket.id);
         if (player && player.health > 0) {
-            console.log('Player movement:', { id: socket.id, from: { x: player.x, y: player.y }, to: { x: data.x, y: data.y } });
-            player.x = data.x;
-            player.y = data.y;
-            player.lastActivity = Date.now();
-            io.emit('playerUpdate', {
-                id: socket.id,
-                x: player.x,
-                y: player.y,
-                health: player.health,
-                color: player.color,
-                name: player.name
-            });
+            // Throttle movement updates - only process if enough time has passed
+            const now = Date.now();
+            const timeSinceLastUpdate = now - (player.lastMovementUpdate || 0);
+            
+            if (timeSinceLastUpdate >= 30) { // Limit to ~33 updates per second
+                console.log('Player movement:', { id: socket.id, from: { x: player.x, y: player.y }, to: { x: data.x, y: data.y } });
+                player.x = data.x;
+                player.y = data.y;
+                player.lastActivity = now;
+                player.lastMovementUpdate = now;
+                
+                // Only broadcast to other players, not back to sender
+                socket.broadcast.emit('playerUpdate', {
+                    id: socket.id,
+                    x: player.x,
+                    y: player.y,
+                    health: player.health,
+                    color: player.color,
+                    name: player.name
+                });
+            }
         }
     });
 
