@@ -475,7 +475,6 @@
         const ctx = canvas.getContext('2d', { alpha: false });
         let gameLoopStarted = false;
         let lastFrameTime = 0;
-        let playerDirection = 1;
         
         // Missing constants and variables
         const PLAYER_SIZE = 100;
@@ -755,11 +754,17 @@
             }
             if (isKeyPressed('left')) {
                 dx -= 1;
-                playerDirection = 1;
+                // Update player direction
+                if (gameState.myPlayer) {
+                    gameState.myPlayer.direction = 1; // Facing left
+                }
             }
             if (isKeyPressed('right')) {
                 dx += 1;
-                playerDirection = -1;
+                // Update player direction
+                if (gameState.myPlayer) {
+                    gameState.myPlayer.direction = -1; // Facing right
+                }
             }
 
             // Debug movement input
@@ -794,6 +799,7 @@
                 if (gameState.players[gameState.myId]) {
                     gameState.players[gameState.myId].x = newX;
                     gameState.players[gameState.myId].y = newY;
+                    gameState.players[gameState.myId].direction = gameState.myPlayer.direction;
                 }
 
                 // Only send update to server if enough time has passed and significant movement occurred
@@ -809,7 +815,8 @@
                         // Reduced logging frequency
                         socket.emit('move', {
                             x: newX,
-                            y: newY
+                            y: newY,
+                            direction: gameState.myPlayer.direction
                         });
                         lastMovementUpdate = now;
                         lastSentPosition = { x: newX, y: newY };
@@ -861,6 +868,7 @@
                 color: '#00d4ff',
                 name: 'You (Offline)',
                 angle: 0,
+                direction: 1,
                 kills: 0
             };
             gameState.players['offline-player'] = gameState.myPlayer;
@@ -1113,8 +1121,9 @@
             // Translate to player position
             ctx.translate(player.x, player.y);
             
-            // Scale horizontally based on player direction
-            ctx.scale(playerDirection, 1);
+            // Scale horizontally based on player direction (with fallback)
+            const direction = player.direction || 1; // Default to facing left if no direction
+            ctx.scale(direction, 1);
             
             // Set transparency
             ctx.globalAlpha = 0.8;
@@ -1140,7 +1149,7 @@
             }
             
             // Reset scale before drawing bat
-            ctx.scale(playerDirection, 1); // Reset the player direction scale
+            ctx.scale(direction, 1); // Reset the player direction scale
             
             // Draw the bat weapon
             if (player.id === gameState.myId) {

@@ -89,6 +89,7 @@ io.on('connection', (socket) => {
         color: getRandomColor(),
         name: `Player ${playerNumber}`,
         angle: 0,
+        direction: 1, // Add default direction (facing left)
         kills: 0,
         lastActivity: Date.now()
     };
@@ -127,6 +128,9 @@ io.on('connection', (socket) => {
                 // Update server-side position (for hit detection, etc.)
                 player.x = data.x;
                 player.y = data.y;
+                if (data.direction !== undefined) {
+                    player.direction = data.direction;
+                }
                 player.lastActivity = now;
                 player.lastMovementUpdate = now;
                 
@@ -136,6 +140,7 @@ io.on('connection', (socket) => {
                     id: socket.id,
                     x: player.x,
                     y: player.y,
+                    direction: player.direction,
                     health: player.health,
                     color: player.color,
                     name: player.name
