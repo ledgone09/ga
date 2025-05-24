@@ -557,6 +557,13 @@
         let socket = null;
         let connectionStatus = 'disconnected';
         
+        // Detect server URL automatically
+        const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+        const serverUrl = isProduction ? window.location.origin : 'http://localhost:3000';
+        
+        console.log('Environment detected:', isProduction ? 'production' : 'development');
+        console.log('Server URL:', serverUrl);
+        
         // Game state
         let gameState = {
             players: {},
@@ -582,19 +589,28 @@
             }
 
             try {
-                socket = io('http://localhost:3000', {
-                    transports: ['websocket']
+                socket = io(serverUrl, {
+                    transports: ['websocket', 'polling'],
+                    timeout: 20000,
+                    forceNew: true
                 });
 
                 socket.on('connect', () => {
-                    console.log('Connected to server with ID:', socket.id);
+                    console.log('✅ Connected to server with ID:', socket.id);
+                    console.log('🌐 Transport:', socket.io.engine.transport.name);
                     updateConnectionStatus('connected');
                     gameState.myId = socket.id;
                 });
 
-                socket.on('disconnect', () => {
-                    console.log('Disconnected from server');
+                socket.on('disconnect', (reason) => {
+                    console.log('❌ Disconnected from server. Reason:', reason);
                     updateConnectionStatus('disconnected');
+                });
+
+                socket.on('connect_error', (error) => {
+                    console.error('🔴 Connection error:', error);
+                    updateConnectionStatus('disconnected');
+                    showConnectionError(`Connection failed: ${error.message}`);
                 });
 
                 socket.on('gameState', (state) => {
