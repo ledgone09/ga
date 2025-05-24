@@ -551,8 +551,36 @@
         
         // Add movement prediction variables
         let lastMovementUpdate = 0;
-        const MOVEMENT_UPDATE_RATE = 50; // Send position updates every 50ms
-        const PREDICTION_THRESHOLD = 100; // Maximum prediction distance
+        const MOVEMENT_UPDATE_RATE = 16; // Increased update rate (about 60fps)
+        const PREDICTION_THRESHOLD = 150; // Increased prediction threshold
+        const INTERPOLATION_SPEED = 0.25; // Smooth interpolation speed
+        let pendingUpdates = new Map(); // Track pending position updates
+        let lastServerPosition = null; // Last confirmed server position
+        
+        // Add server correction handler
+        socket.on('serverCorrection', (correction) => {
+            const timeDiff = Date.now() - correction.timestamp;
+            if (timeDiff > 1000) return; // Ignore very old corrections
+            
+            // Smoothly interpolate to the correct position
+            if (gameState.myPlayer) {
+                lastServerPosition = {
+                    x: correction.x,
+                    y: correction.y,
+                    timestamp: correction.timestamp
+                };
+                
+                // Calculate a smoother correction
+                const dx = correction.x - gameState.myPlayer.x;
+                const dy = correction.y - gameState.myPlayer.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > 5) { // Only correct if difference is significant
+                    gameState.myPlayer.x += dx * INTERPOLATION_SPEED;
+                    gameState.myPlayer.y += dy * INTERPOLATION_SPEED;
+                }
+            }
+        });
         
         // Game functions
         function initOfflineMode() {
@@ -1320,11 +1348,21 @@
                 const now = Date.now();
                 if (now - lastMovementUpdate >= MOVEMENT_UPDATE_RATE) {
                     if (socket && socket.connected) {
-                        socket.emit('move', { 
+                        const update = { 
                             x: newX, 
                             y: newY,
                             timestamp: now
-                        });
+                        };
+                        
+                        socket.emit('move', update);
+                        pendingUpdates.set(now, update);
+                        
+                        // Clean up old pending updates
+                        for (const [timestamp, _] of pendingUpdates) {
+                            if (now - timestamp > 1000) {
+                                pendingUpdates.delete(timestamp);
+                            }
+                        }
                     }
                     lastMovementUpdate = now;
                 }
@@ -1339,9 +1377,22 @@
 
                 // If player has target position, interpolate towards it
                 if (player.targetX !== undefined && player.targetY !== undefined) {
-                    const interpolationFactor = 0.3;
-                    player.x += (player.targetX - player.x) * interpolationFactor;
-                    player.y += (player.targetY - player.y) * interpolationFactor;
+                    player.x += (player.targetX - player.x) * INTERPOLATION_SPEED;
+                    player.y += (player.targetY - player.y) * INTERPOLATION_SPEED;
+                }
+            }
+            
+            // Apply server correction if needed
+            if (lastServerPosition) {
+                const dx = lastServerPosition.x - gameState.myPlayer.x;
+                const dy = lastServerPosition.y - gameState.myPlayer.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > 5) {
+                    gameState.myPlayer.x += dx * INTERPOLATION_SPEED;
+                    gameState.myPlayer.y += dy * INTERPOLATION_SPEED;
+                } else {
+                    lastServerPosition = null;
                 }
             }
             
