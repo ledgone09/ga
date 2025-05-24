@@ -475,37 +475,73 @@
         const ctx = canvas.getContext('2d', { alpha: false });
         let gameLoopStarted = false;
         let lastFrameTime = 0;
-        const MAX_BULLETS = 50;
-        const MAX_EFFECTS = 10;
+        let playerDirection = 1;
         
-        // Load character sprite
-        const characterSprite = new Image();
-        characterSprite.src = 'character.png';
-        const PLAYER_SIZE = 80; // Increased size
-        
-        // Load bat weapon sprite
-        const batSprite = new Image();
-        batSprite.src = 'bat.png';
-        const BAT_SIZE = 100;
-        const ATTACK_DURATION = 200; // Faster attack for snappier feel
-        const ATTACK_ANGLE = Math.PI * 0.25; // Reduced swing angle to 45 degrees
-        const ATTACK_COOLDOWN = 350; // Slightly faster cooldown
-        
-        // Smooth animation interpolation
-        let lastWeaponAngle = 0;
+        // Missing constants and variables
+        const PLAYER_SIZE = 60;
+        const BAT_SIZE = 60;
+        const ATTACK_COOLDOWN = 500;
+        const ATTACK_DURATION = 200;
+        const ATTACK_ANGLE = Math.PI / 3;
         const ANGLE_SMOOTHING = 0.15;
+        const MAX_EFFECTS = 50;
         
-        // Attack state
+        // Missing game state variables
+        let canShoot = true;
         let isAttacking = false;
         let attackStartTime = 0;
         let attackAngle = 0;
+        let lastWeaponAngle = 0;
         
-        // Movement and rotation smoothing
-        const rotationSmoothing = 0.15; // Lower = smoother rotation
-        const movementSmoothing = 0.2; // Lower = smoother movement
+        // Create simple sprite substitutes (colored rectangles)
+        const characterSprite = (() => {
+            const img = new Image();
+            img.src = 'character.png';
+            img.onerror = () => {
+                console.error('Failed to load character.png');
+            };
+            img.onload = () => {
+                console.log('Character sprite loaded successfully');
+            };
+            return img;
+        })();
         
-        // Throttle shooting
-        let canShoot = true;
+        const batSprite = (() => {
+            const img = new Image();
+            img.src = 'bat.png';
+            img.onerror = () => {
+                console.error('Failed to load bat.png');
+            };
+            img.onload = () => {
+                console.log('Bat sprite loaded successfully');
+            };
+            return img;
+        })();
+        
+        // Movement settings
+        const PLAYER_SPEED = 7; // Increased speed slightly
+        const MOVE_KEYS = {
+            up: ['w', 'arrowup'],
+            down: ['s', 'arrowdown'],
+            left: ['a', 'arrowleft'],
+            right: ['d', 'arrowright']
+        };
+
+        function isKeyPressed(direction) {
+            return MOVE_KEYS[direction].some(key => keys[key]);
+        }
+
+        // Visual effects
+        let particles = [];
+        let muzzleFlashes = [];
+        let hitEffects = [];
+        
+        // Kill feed
+        let killFeed = [];
+        
+        // Input handling
+        const keys = {};
+        let mouse = { x: 0, y: 0, clicked: false };
         
         // Movement and networking settings
         const BASE_SPEED = 5;
@@ -520,11 +556,6 @@
         // Socket connection
         let socket = null;
         let connectionStatus = 'disconnected';
-        let reconnectAttempts = 0;
-        const MAX_RECONNECT_ATTEMPTS = 3;
-        let pingInterval = null;
-        let connectionTimeout = null;
-        let forceDisconnected = false;
         
         // Game state
         let gameState = {
@@ -543,191 +574,157 @@
             kdr: 0.00
         };
         
-        // Input handling
-        const keys = {};
-        let mouse = { x: 0, y: 0, clicked: false };
-        
-        // Visual effects
-        let particles = [];
-        let muzzleFlashes = [];
-        let hitEffects = [];
-        
-        // Kill feed
-        let killFeed = [];
-        
-        // Add this after the game variables section
-        let playerDirection = 1; // 1 for right, -1 for left
-        
+        // Game functions
         function connectToServer() {
-            if (forceDisconnected || (socket && socket.connected)) {
-                console.log('Already connected or force disconnected');
-                if (forceDisconnected) initOfflineMode();
-                return;
+            console.log('Attempting to connect to server...');
+            if (socket) {
+                socket.disconnect();
             }
 
-            cleanup();
-            updateConnectionStatus('connecting');
-
             try {
-                console.log('Connecting to server...');
-                const serverUrl = window.location.hostname === 'localhost' ? 
-                    'http://localhost:3000' : 
-                    `${window.location.protocol === 'https:' ? 'https' : 'http'}://${window.location.host}`;
-
-                socket = io(serverUrl, {
-                    timeout: 5000,
-                    transports: ['websocket'],
-                    reconnection: false,
-                    multiplex: false
+                socket = io('http://localhost:3000', {
+                    transports: ['websocket']
                 });
 
-                setupSocketHandlers();
-                
-                connectionTimeout = setTimeout(() => {
-                    if (socket && !socket.connected) {
-                        cleanup();
-                        updateConnectionStatus('disconnected');
-                        tryReconnectOrOffline();
+                socket.on('connect', () => {
+                    console.log('Connected to server with ID:', socket.id);
+                    updateConnectionStatus('connected');
+                    gameState.myId = socket.id;
+                });
+
+                socket.on('disconnect', () => {
+                    console.log('Disconnected from server');
+                    updateConnectionStatus('disconnected');
+                });
+
+                socket.on('gameState', (state) => {
+                    console.log('Received game state:', state);
+                    if (state && state.players) {
+                        gameState.players = state.players;
+                        gameState.myPlayer = state.players[socket.id];
+                        gameState.playerCount = state.playerCount;
+                        
+                        // Ensure myPlayer is also in the players collection
+                        if (gameState.myPlayer) {
+                            gameState.players[socket.id] = gameState.myPlayer;
+                        }
+                        
+                        console.log('My player:', gameState.myPlayer);
+                        console.log('All players:', gameState.players);
+                        
+                        if (!gameLoopStarted && gameState.myPlayer) {
+                            console.log('Starting game loop');
+                            gameLoopStarted = true;
+                            requestAnimationFrame(gameLoop);
+                        }
+                        updateHUD();
                     }
-                }, 5000);
+                });
+
+                socket.on('playerUpdate', (player) => {
+                    console.log('Player update received:', player);
+                    
+                    // Always update the players collection
+                    gameState.players[player.id] = player;
+                    
+                    // If this is my player, also update myPlayer reference
+                    if (player.id === socket.id) {
+                        console.log('Updating my player position:', player);
+                        gameState.myPlayer = player;
+                    } else {
+                        console.log('Updating other player:', player.id);
+                    }
+                    updateHUD();
+                });
+
+                socket.on('playerLeft', (playerId) => {
+                    delete gameState.players[playerId];
+                    updateHUD();
+                });
+
+                socket.on('playerCountUpdate', (count) => {
+                    gameState.playerCount = count;
+                    updateHUD();
+                });
+
+                socket.on('playerHit', (data) => {
+                    createHitEffect(data.x, data.y);
+                    if (data.playerId && gameState.players[data.playerId]) {
+                        gameState.players[data.playerId].health = data.health;
+                        if (data.playerId === gameState.myId) {
+                            gameState.myPlayer.health = data.health;
+                            updateHUD();
+                        }
+                    }
+                });
+
+                socket.on('playerKilled', (data) => {
+                    const { killer, victim } = data;
+                    addToKillFeed(`${killer.name} eliminated ${victim.name}`);
+                    
+                    if (victim.id === gameState.myId) {
+                        showRespawnScreen(killer.name);
+                        stats.deaths++;
+                        updateStats();
+                    }
+                    
+                    if (killer.id === gameState.myId) {
+                        stats.kills++;
+                        updateStats();
+                    }
+                });
+
+                socket.on('playerRespawned', (player) => {
+                    gameState.players[player.id] = player;
+                    if (player.id === gameState.myId) {
+                        gameState.myPlayer = player;
+                        hideRespawnScreen();
+                        updateHUD();
+                    }
+                });
 
             } catch (error) {
                 console.error('Connection failed:', error);
-                handleDisconnect();
+                updateConnectionStatus('disconnected');
             }
-        }
-
-        function setupSocketHandlers() {
-            if (!socket) return;
-
-            socket.on('connect', () => {
-                console.log('Connected to server with ID:', socket.id);
-                clearTimeout(connectionTimeout);
-                updateConnectionStatus('connected');
-                gameState.myId = socket.id;
-                reconnectAttempts = 0;
-                forceDisconnected = false;
-                
-                pingInterval = setInterval(() => {
-                    if (socket && socket.connected) socket.emit('ping');
-                }, 2000);
-            });
-
-            socket.on('disconnect', () => {
-                console.log('Disconnected from server');
-                handleDisconnect();
-            });
-
-            socket.on('error', (error) => {
-                console.error('Socket error:', error);
-            });
-
-            socket.on('connect_error', (error) => {
-                console.error('Connection error:', error);
-            });
-
-            socket.on('serverCorrection', (correction) => {
-                if (!gameState.myPlayer) return;
-                
-                const timeDiff = Date.now() - correction.timestamp;
-                if (timeDiff > 1000) return;
-
-                lastServerPosition = {
-                    x: correction.x,
-                    y: correction.y,
-                    timestamp: correction.timestamp
-                };
-
-                // Apply smooth correction
-                const dx = correction.x - gameState.myPlayer.x;
-                const dy = correction.y - gameState.myPlayer.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                if (distance > CORRECTION_THRESHOLD) {
-                    gameState.myPlayer.x += dx * INTERPOLATION_SPEED;
-                    gameState.myPlayer.y += dy * INTERPOLATION_SPEED;
-                }
-            });
-
-            socket.on('gameState', (state) => {
-                if (!state || typeof state !== 'object') {
-                    console.error('Invalid game state:', state);
-                    return;
-                }
-
-                gameState.players = state.players || {};
-                gameState.myPlayer = state.players[socket.id];
-                gameState.playerCount = state.playerCount || 0;
-
-                if (gameState.myPlayer && !gameLoopStarted) {
-                    console.log('Starting game loop...');
-                    gameLoopStarted = true;
-                    gameLoop();
-                }
-
-                updateHUD();
-            });
-
-            socket.on('playerUpdate', (player) => {
-                if (!player || !player.id) return;
-                
-                if (player.id === socket.id) {
-                    // Server correction for own player
-                    if (!gameState.myPlayer) return;
-                    
-                    const dx = player.x - gameState.myPlayer.x;
-                    const dy = player.y - gameState.myPlayer.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (distance > CORRECTION_THRESHOLD) {
-                        gameState.myPlayer.x += dx * INTERPOLATION_SPEED;
-                        gameState.myPlayer.y += dy * INTERPOLATION_SPEED;
-                    }
-                } else {
-                    // Update other players
-                    if (!gameState.players[player.id]) {
-                        gameState.players[player.id] = player;
-                    } else {
-                        const existingPlayer = gameState.players[player.id];
-                        existingPlayer.targetX = player.x;
-                        existingPlayer.targetY = player.y;
-                        existingPlayer.health = player.health;
-                    }
-                }
-                updateHUD();
-            });
         }
 
         function gameLoop(timestamp) {
             if (!gameState.myPlayer) {
-                animationFrameId = requestAnimationFrame(gameLoop);
+                console.log('No player data, waiting...');
+                requestAnimationFrame(gameLoop);
                 return;
             }
 
-            const deltaTime = timestamp - lastFrameTime;
+            const deltaTime = Math.min(timestamp - lastFrameTime, 50);
             lastFrameTime = timestamp;
 
-            if (deltaTime > 100) {
-                animationFrameId = requestAnimationFrame(gameLoop);
-                return;
-            }
-
-            // Movement handling
-            const speed = BASE_SPEED * (deltaTime / 16);
+            // Handle movement
             let dx = 0;
             let dy = 0;
 
-            if (keys['w'] || keys['arrowup']) dy -= speed;
-            if (keys['s'] || keys['arrowdown']) dy += speed;
-            if (keys['a'] || keys['arrowleft']) {
-                dx -= speed;
+            // Check movement keys
+            if (isKeyPressed('up')) {
+                dy -= 1;
+            }
+            if (isKeyPressed('down')) {
+                dy += 1;
+            }
+            if (isKeyPressed('left')) {
+                dx -= 1;
                 playerDirection = 1;
             }
-            if (keys['d'] || keys['arrowright']) {
-                dx += speed;
+            if (isKeyPressed('right')) {
+                dx += 1;
                 playerDirection = -1;
             }
 
+            // Debug movement input
+            if (dx !== 0 || dy !== 0) {
+                console.log('Movement input detected:', { dx, dy, keys });
+            }
+
+            // If there's movement input
             if (dx !== 0 || dy !== 0) {
                 // Normalize diagonal movement
                 if (dx !== 0 && dy !== 0) {
@@ -736,69 +733,58 @@
                     dy *= normalizer;
                 }
 
-                // Update local position
+                // Apply speed and delta time
+                const moveSpeed = PLAYER_SPEED * (deltaTime / 16);
+                dx *= moveSpeed;
+                dy *= moveSpeed;
+
+                // Calculate new position
                 const newX = Math.max(PLAYER_SIZE/2, Math.min(canvas.width - PLAYER_SIZE/2, gameState.myPlayer.x + dx));
                 const newY = Math.max(PLAYER_SIZE/2, Math.min(canvas.height - PLAYER_SIZE/2, gameState.myPlayer.y + dy));
 
-                gameState.myPlayer.x = newX;
-                gameState.myPlayer.y = newY;
+                // Only update if position actually changed
+                if (newX !== gameState.myPlayer.x || newY !== gameState.myPlayer.y) {
+                    // Update local position
+                    gameState.myPlayer.x = newX;
+                    gameState.myPlayer.y = newY;
 
-                // Send position updates
-                const now = Date.now();
-                if (now - lastMovementUpdate >= MOVEMENT_UPDATE_RATE) {
+                    // Send update to server
                     if (socket && socket.connected) {
-                        const update = {
+                        console.log('Sending movement to server:', { x: newX, y: newY });
+                        socket.emit('move', {
                             x: newX,
-                            y: newY,
-                            timestamp: now,
-                            inputSequence: ++lastProcessedInput
-                        };
-
-                        socket.emit('move', update);
-                        pendingUpdates.set(lastProcessedInput, update);
-
-                        // Clean up old updates
-                        for (const [seq, update] of pendingUpdates) {
-                            if (now - update.timestamp > 1000) {
-                                pendingUpdates.delete(seq);
-                            }
-                        }
+                            y: newY
+                        });
+                    } else {
+                        console.log('Not connected to server, moving locally');
                     }
-                    lastMovementUpdate = now;
                 }
             }
 
-            // Interpolate other players
-            for (const playerId in gameState.players) {
-                if (playerId === gameState.myId) continue;
-
-                const player = gameState.players[playerId];
-                if (!player || player.health <= 0) continue;
-
-                if (player.targetX !== undefined && player.targetY !== undefined) {
-                    player.x += (player.targetX - player.x) * INTERPOLATION_SPEED;
-                    player.y += (player.targetY - player.y) * INTERPOLATION_SPEED;
-                }
-            }
-
-            // Render
+            // Clear and render
             ctx.fillStyle = '#0a0a0a';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             drawGrid();
             
-            // Draw players
+            // Draw all players
             for (const playerId in gameState.players) {
                 const player = gameState.players[playerId];
                 if (player && player.health > 0) {
                     drawPlayer(player);
                 }
             }
+            
+            // Also draw myPlayer if it's not in the players collection (fallback)
+            if (gameState.myPlayer && gameState.myPlayer.health > 0 && !gameState.players[gameState.myId]) {
+                console.log('Drawing myPlayer as fallback:', gameState.myPlayer);
+                drawPlayer(gameState.myPlayer);
+            }
 
             drawHitEffects();
             drawCrosshair();
 
-            animationFrameId = requestAnimationFrame(gameLoop);
+            requestAnimationFrame(gameLoop);
         }
         
         // Game functions
@@ -837,39 +823,6 @@
                     break;
             }
         }
-        
-        // Input event listeners
-        canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            mouse.x = e.clientX - rect.left;
-            mouse.y = e.clientY - rect.top;
-        }, { passive: true });
-        
-        canvas.addEventListener('mousedown', (e) => {
-            if (e.button === 0) {
-                mouse.clicked = true;
-                shoot();
-            }
-        }, { passive: true });
-        
-        canvas.addEventListener('mouseup', (e) => {
-            if (e.button === 0) {
-                mouse.clicked = false;
-            }
-        }, { passive: true });
-        
-        document.addEventListener('keydown', (e) => {
-            keys[e.key.toLowerCase()] = true;
-            
-            if (e.key === ' ' || e.key === 'Space') {
-                e.preventDefault();
-                shoot();
-            }
-        });
-        
-        document.addEventListener('keyup', (e) => {
-            keys[e.key.toLowerCase()] = false;
-        });
         
         // Game functions
         function shoot() {
@@ -1095,14 +1048,25 @@
             // Set transparency
             ctx.globalAlpha = 0.8;
             
-            // Draw the character sprite
-            ctx.drawImage(
-                characterSprite,
-                -PLAYER_SIZE/2,
-                -PLAYER_SIZE/2,
-                PLAYER_SIZE,
-                PLAYER_SIZE
-            );
+            // Draw the character sprite (with fallback)
+            if (characterSprite && characterSprite.complete && characterSprite.naturalHeight !== 0) {
+                ctx.drawImage(
+                    characterSprite,
+                    -PLAYER_SIZE/2,
+                    -PLAYER_SIZE/2,
+                    PLAYER_SIZE,
+                    PLAYER_SIZE
+                );
+            } else {
+                // Fallback: draw a simple circle
+                ctx.fillStyle = isMe ? '#00d4ff' : '#ff6b6b';
+                ctx.beginPath();
+                ctx.arc(0, 0, PLAYER_SIZE/2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
             
             // Reset scale before drawing bat
             ctx.scale(playerDirection, 1); // Reset the player direction scale
@@ -1144,24 +1108,38 @@
                 // Draw bat with slight motion blur during attack
                 if (isAttacking) {
                     ctx.globalAlpha = 0.3;
-                    ctx.drawImage(
-                        batSprite,
-                        -BAT_SIZE - 5,
-                        -BAT_SIZE/2,
-                        BAT_SIZE,
-                        BAT_SIZE * 0.8
-                    );
+                    if (batSprite && batSprite.complete && batSprite.naturalHeight !== 0) {
+                        ctx.drawImage(
+                            batSprite,
+                            -BAT_SIZE - 5,
+                            -BAT_SIZE/2,
+                            BAT_SIZE,
+                            BAT_SIZE * 0.8
+                        );
+                    } else {
+                        // Fallback bat
+                        ctx.fillStyle = '#8B4513';
+                        ctx.fillRect(-BAT_SIZE - 5, -4, BAT_SIZE * 0.8, 8);
+                    }
                     ctx.globalAlpha = 0.8;
                 }
                 
                 // Draw main bat
-                ctx.drawImage(
-                    batSprite,
-                    -BAT_SIZE,
-                    -BAT_SIZE/2,
-                    BAT_SIZE,
-                    BAT_SIZE * 0.8
-                );
+                if (batSprite && batSprite.complete && batSprite.naturalHeight !== 0) {
+                    ctx.drawImage(
+                        batSprite,
+                        -BAT_SIZE,
+                        -BAT_SIZE/2,
+                        BAT_SIZE,
+                        BAT_SIZE * 0.8
+                    );
+                } else {
+                    // Fallback bat
+                    ctx.fillStyle = '#8B4513';
+                    ctx.fillRect(-BAT_SIZE, -4, BAT_SIZE * 0.8, 8);
+                    ctx.fillStyle = '#654321';
+                    ctx.fillRect(-BAT_SIZE * 0.2, -2, BAT_SIZE * 0.2, 4);
+                }
                 
                 ctx.restore();
             }
@@ -1181,7 +1159,7 @@
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(
                 player.x - healthBarWidth / 2 - 1,
-                player.y - 55 - 1,
+                player.y - 75 - 1,
                 healthBarWidth + 2,
                 healthBarHeight + 2
             );
@@ -1190,7 +1168,7 @@
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.fillRect(
                 player.x - healthBarWidth / 2,
-                player.y - 55,
+                player.y - 75,
                 healthBarWidth,
                 healthBarHeight
             );
@@ -1199,7 +1177,7 @@
             ctx.fillStyle = healthPercentage > 0.5 ? '#22c55e' : healthPercentage > 0.25 ? '#eab308' : '#ef4444';
             ctx.fillRect(
                 player.x - healthBarWidth / 2,
-                player.y - 55,
+                player.y - 75,
                 healthBarWidth * healthPercentage,
                 healthBarHeight
             );
@@ -1210,11 +1188,11 @@
             
             // Name shadow
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillText(player.name, player.x + 1, player.y - 65 + 1);
+            ctx.fillText(player.name, player.x + 1, player.y - 85 + 1);
             
             // Name text
             ctx.fillStyle = isMe ? '#fff' : 'rgba(255, 255, 255, 0.7)';
-            ctx.fillText(player.name, player.x, player.y - 65);
+            ctx.fillText(player.name, player.x, player.y - 85);
         }
         
         function drawBullet(bullet) {
@@ -1288,8 +1266,51 @@
             ctx.fill();
         }
         
-        // Start game
-        connectToServer();
+        // Start the game when the page loads
+        window.addEventListener('load', () => {
+            console.log('Page loaded, connecting to server...');
+            connectToServer();
+        });
+        
+        // Input event listeners
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            keys[key] = true;
+            console.log('Key pressed:', key, 'Keys state:', keys);
+            
+            // Shooting with spacebar
+            if (e.code === 'Space') {
+                e.preventDefault();
+                shoot();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            keys[key] = false;
+            console.log('Key released:', key);
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        });
+        
+        canvas.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            mouse.clicked = true;
+            shoot();
+        });
+        
+        canvas.addEventListener('mouseup', (e) => {
+            mouse.clicked = false;
+        });
+        
+        // Prevent context menu on right click
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
     </script>
 </body>
 </html>
