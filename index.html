@@ -596,24 +596,41 @@
                     timeout: 20000,
                     forceNew: true
                 });
-
+                
                 socket.on('connect', () => {
                     console.log('✅ Connected to server with ID:', socket.id);
                     console.log('🌐 Transport:', socket.io.engine.transport.name);
                     updateConnectionStatus('connected');
                     gameState.myId = socket.id;
                 });
-
+                
                 socket.on('disconnect', (reason) => {
                     console.log('❌ Disconnected from server. Reason:', reason);
                     updateConnectionStatus('disconnected');
+                    // Initialize offline mode if disconnected
+                    if (!gameState.myPlayer) {
+                        initOfflineMode();
+                    }
                 });
-
+                
                 socket.on('connect_error', (error) => {
                     console.error('🔴 Connection error:', error);
                     updateConnectionStatus('disconnected');
                     showConnectionError(`Connection failed: ${error.message}`);
+                    // Initialize offline mode if connection fails
+                    if (!gameState.myPlayer) {
+                        console.log('Connection failed, starting offline mode');
+                        initOfflineMode();
+                    }
                 });
+
+                // Add timeout fallback
+                setTimeout(() => {
+                    if (!socket.connected && !gameState.myPlayer) {
+                        console.log('Connection timeout, starting offline mode');
+                        initOfflineMode();
+                    }
+                }, 5000);
 
                 socket.on('gameState', (state) => {
                     console.log('Received game state:', state);
@@ -815,6 +832,7 @@
         
         // Game functions
         function initOfflineMode() {
+            console.log('🔧 Initializing offline mode...');
             gameState.myId = 'offline-player';
             gameState.myPlayer = {
                 id: 'offline-player',
@@ -823,13 +841,22 @@
                 health: 100,
                 maxHealth: 100,
                 color: '#00d4ff',
-                name: 'You',
+                name: 'You (Offline)',
                 angle: 0,
                 kills: 0
             };
             gameState.players['offline-player'] = gameState.myPlayer;
+            gameState.playerCount = 1;
+            
             updateHUD();
             document.getElementById('playerName').textContent = 'Offline Mode';
+            
+            // Start game loop if not already started
+            if (!gameLoopStarted) {
+                console.log('🎮 Starting game loop in offline mode');
+                gameLoopStarted = true;
+                requestAnimationFrame(gameLoop);
+            }
         }
         
         function updateConnectionStatus(status) {
@@ -1105,9 +1132,6 @@
                 let targetAngle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
                 const mouseOnRight = mouse.x > player.x;
                 
-                // Determine player facing direction based on mouse position
-                const facingRight = mouseOnRight;
-                
                 if (isAttacking) {
                     const progress = (Date.now() - attackStartTime) / ATTACK_DURATION;
                     if (progress >= 1) {
@@ -1115,7 +1139,7 @@
                     } else {
                         // Smoother swing animation with quadratic easing
                         const swingProgress = Math.sin(progress * Math.PI);
-                        const swingAmount = facingRight ? ATTACK_ANGLE : -ATTACK_ANGLE;
+                        const swingAmount = mouseOnRight ? ATTACK_ANGLE : -ATTACK_ANGLE;
                         const swingEase = swingProgress * swingProgress;
                         targetAngle += swingAmount * swingEase;
                     }
@@ -1128,44 +1152,74 @@
                 }
                 lastWeaponAngle = weaponAngle;
                 
-                // Reset any previous transformations
-                ctx.scale(1, 1);
-                
-                // Rotate to weapon angle
+                // Rotate to face mouse
                 ctx.rotate(weaponAngle);
                 
-                // Adjust bat orientation based on which side of player we're on
-                let batOffsetX = -BAT_SIZE * 0.8;
-                let batOffsetY = -BAT_SIZE/2;
+                // Add 180-degree rotation to fix bat orientation
+                ctx.rotate(Math.PI);
                 
-                // If mouse is on left side, flip the bat orientation
-                if (!facingRight) {
-                    ctx.rotate(Math.PI); // Flip the bat 180 degrees
-                    batOffsetX = -BAT_SIZE * 0.2; // Adjust offset for flipped orientation
-                }
-                
-                // Draw bat with motion blur during attack
+                // Draw bat with slight motion blur during attack
                 if (isAttacking) {
                     ctx.globalAlpha = 0.3;
                     if (batSprite && batSprite.complete && batSprite.naturalHeight !== 0) {
-                        ctx.drawImage(batSprite, batOffsetX - 5, batOffsetY, BAT_SIZE, BAT_SIZE * 0.8);
+                        ctx.drawImage(
+                            batSprite,
+                            -BAT_SIZE - 5,
+                            -BAT_SIZE/2,
+                            BAT_SIZE,
+                            BAT_SIZE * 0.8
+                        );
                     } else {
                         // Fallback bat
                         ctx.fillStyle = '#8B4513';
-                        ctx.fillRect(batOffsetX - 5, -4, BAT_SIZE * 0.8, 8);
+                        ctx.fillRect(-BAT_SIZE - 5, -4, BAT_SIZE * 0.8, 8);
                     }
                     ctx.globalAlpha = 0.8;
                 }
                 
                 // Draw main bat
                 if (batSprite && batSprite.complete && batSprite.naturalHeight !== 0) {
-                    ctx.drawImage(batSprite, batOffsetX, batOffsetY, BAT_SIZE, BAT_SIZE * 0.8);
+                    ctx.drawImage(
+                        batSprite,
+                        -BAT_SIZE,
+                        -BAT_SIZE/2,
+                        BAT_SIZE,
+                        BAT_SIZE * 0.8
+                    );
                 } else {
                     // Fallback bat
                     ctx.fillStyle = '#8B4513';
-                    ctx.fillRect(batOffsetX, -4, BAT_SIZE * 0.8, 8);
+                    ctx.fillRect(-BAT_SIZE, -4, BAT_SIZE * 0.8, 8);
                     ctx.fillStyle = '#654321';
-                    ctx.fillRect(batOffsetX + BAT_SIZE * 0.6, -2, BAT_SIZE * 0.2, 4);
+                    ctx.fillRect(-BAT_SIZE * 0.2, -2, BAT_SIZE * 0.2, 4);
+                }
+                
+                ctx.restore();
+            } else {
+                // Draw weapon for other players (simplified)
+                ctx.save();
+                
+                // Simple weapon angle (could be enhanced with server-sent angle data)
+                const weaponAngle = player.angle || 0;
+                
+                ctx.rotate(weaponAngle);
+                ctx.rotate(Math.PI);
+                
+                // Draw simple bat for other players
+                if (batSprite && batSprite.complete && batSprite.naturalHeight !== 0) {
+                    ctx.drawImage(
+                        batSprite,
+                        -BAT_SIZE,
+                        -BAT_SIZE/2,
+                        BAT_SIZE,
+                        BAT_SIZE * 0.8
+                    );
+                } else {
+                    // Fallback bat for other players
+                    ctx.fillStyle = '#8B4513';
+                    ctx.fillRect(-BAT_SIZE, -4, BAT_SIZE * 0.8, 8);
+                    ctx.fillStyle = '#654321';
+                    ctx.fillRect(-BAT_SIZE * 0.2, -2, BAT_SIZE * 0.2, 4);
                 }
                 
                 ctx.restore();
@@ -1295,8 +1349,22 @@
         
         // Start the game when the page loads
         window.addEventListener('load', () => {
-            console.log('Page loaded, connecting to server...');
+            console.log('🚀 Page loaded, connecting to server...');
+            console.log('🌍 Environment:', isProduction ? 'production' : 'development');
+            console.log('🔗 Server URL:', serverUrl);
+            
+            // Try to connect to server
             connectToServer();
+            
+            // Fallback: if no connection after 8 seconds, start offline mode
+            setTimeout(() => {
+                if (!socket || !socket.connected) {
+                    console.log('⚠️ No server connection, starting offline mode as fallback');
+                    if (!gameState.myPlayer) {
+                        initOfflineMode();
+                    }
+                }
+            }, 8000);
         });
         
         // Input event listeners
