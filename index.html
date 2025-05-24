@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battle Arena</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0c0c0c, #1a1a1a, #0f0f0f);
+            font-family: 'Orbitron', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+            overflow: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 80%, rgba(120, 219, 255, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .game-interface {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 24px;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 
+                0 20px 40px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+        
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            max-width: 1200px;
+            margin-bottom: 20px;
+            padding: 0 20px;
+        }
+        
+        .game-title {
+            font-size: 32px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #00d4ff, #7c3aed, #ff6b6b);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
+            letter-spacing: 2px;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+        
+        @keyframes glow {
+            from { filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.5)); }
+            to { filter: drop-shadow(0 0 20px rgba(124, 58, 237, 0.8)); }
+        }
+        
+        .status-indicators {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .connection-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .connection-badge::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+        
+        .connected {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.1));
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        
+        .connected::before { background: #22c55e; }
+        
+        .disconnected {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.1));
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        
+        .disconnected::before { background: #ef4444; }
+        
+        .connecting {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(251, 191, 36, 0.1));
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.3);
+        }
+        
+        .connecting::before { background: #fbbf24; }
+        
+        .players-count {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(124, 58, 237, 0.1));
+            color: #00d4ff;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+        }
+        
+        .game-arena {
+            position: relative;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 
+                0 0 0 3px rgba(0, 212, 255, 0.3),
+                0 0 0 6px rgba(0, 0, 0, 0.5),
+                0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+        
+        #gameCanvas {
+            display: block;
+            background: linear-gradient(135deg, #0a0a0a, #1a1a1a);
+            cursor: none;
+        }
+        
+        .hud-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .player-hud {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+        }
+        
+        .health-panel {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 16px 20px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-width: 200px;
+        }
+        
+        .health-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .health-bar-container {
+            position: relative;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        
+        .health-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #ef4444, #f97316, #eab308, #22c55e);
+            border-radius: 6px;
+            transition: width 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .health-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: healthShimmer 2s infinite;
+        }
+        
+        @keyframes healthShimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        
+        .health-text {
+            font-size: 14px;
+            font-weight: 700;
+            color: white;
+            text-align: center;
+            margin-top: 4px;
+        }
+        
+        .stats-panel {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 16px 20px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: right;
+        }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        
+        .stat-label {
+            color: rgba(255, 255, 255, 0.7);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-right: 12px;
+        }
+        
+        .stat-value {
+            color: #00d4ff;
+            font-weight: 900;
+        }
+        
+        .kill-feed {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 20;
+        }
+        
+        .kill-message {
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 12px 16px;
+            border-radius: 12px;
+            border-left: 4px solid #ef4444;
+            font-size: 13px;
+            font-weight: 700;
+            color: white;
+            animation: slideInRight 0.5s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .respawn-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(10px);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        
+        .death-icon {
+            font-size: 72px;
+            margin-bottom: 20px;
+            animation: deathPulse 1s ease-in-out infinite;
+        }
+        
+        @keyframes deathPulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.1); opacity: 1; }
+        }
+        
+        .death-message {
+            font-size: 32px;
+            font-weight: 900;
+            color: #ef4444;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .killer-info {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 30px;
+        }
+        
+        .respawn-button {
+            background: linear-gradient(135deg, #00d4ff, #7c3aed);
+            border: none;
+            padding: 16px 32px;
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Orbitron', monospace;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+        }
+        
+        .respawn-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 212, 255, 0.5);
+        }
+        
+        .controls-info {
+            margin-top: 24px;
+            padding: 16px 24px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.8);
+            text-align: center;
+            max-width: 800px;
+            line-height: 1.6;
+        }
+        
+        .control-group {
+            display: inline-block;
+            margin: 0 16px;
+            white-space: nowrap;
+        }
+        
+        .control-key {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 700;
+            color: #00d4ff;
+        }
+
+        .crosshair {
+            position: absolute;
+            pointer-events: none;
+            z-index: 15;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-interface">
+        <div class="game-header">
+            <h1 class="game-title">⚔ BATTLE ARENA</h1>
+            <div class="status-indicators">
+                <div class="connection-badge disconnected" id="connectionStatus">Disconnected</div>
+                <div class="connection-badge players-count" id="playersCount">0 Players</div>
+            </div>
+        </div>
+        
+        <div class="game-arena">
+            <canvas id="gameCanvas" width="1200" height="800"></canvas>
+            
+            <div class="hud-overlay">
+                <div class="player-hud">
+                    <div class="health-panel">
+                        <div class="health-label">Health</div>
+                        <div class="health-bar-container">
+                            <div class="health-bar" id="healthBar" style="width: 100%;"></div>
+                        </div>
+                        <div class="health-text" id="healthText">100 / 100</div>
+                    </div>
+                    
+                    <div class="stats-panel">
+                        <div class="stat-row">
+                            <span class="stat-label">Player</span>
+                            <span class="stat-value" id="playerName">Connecting...</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Kills</span>
+                            <span class="stat-value" id="killCount">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Deaths</span>
+                            <span class="stat-value" id="deathCount">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">K/D</span>
+                            <span class="stat-value" id="kdratio">0.00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="kill-feed" id="killFeed"></div>
+            
+            <div class="respawn-overlay" id="respawnOverlay">
+                <div class="death-icon">💀</div>
+                <div class="death-message">Eliminated</div>
+                <div class="killer-info">Killed by: <span id="killerName">Unknown</span></div>
+                <button class="respawn-button" onclick="requestRespawn()">Respawn</button>
+            </div>
+        </div>
+        
+        <div class="controls-info">
+            <div class="control-group">
+                <span class="control-key">WASD</span> Move
+            </div>
+            <div class="control-group">
+                <span class="control-key">Mouse</span> Aim
+            </div>
+            <div class="control-group">
+                <span class="control-key">Click</span> / <span class="control-key">Space</span> Shoot
+            </div>
+            <div class="control-group">
+                <span class="control-key">R</span> Reload
+            </div>
+        </div>
+    </div>
+
+    <!-- Socket.io CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    
+    <script>
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        let gameLoopStarted = false;
+        let lastFrameTime = 0;
+        const MAX_BULLETS = 50;
+        const MAX_EFFECTS = 10;
+        
+        // Load character sprite
+        const characterSprite = new Image();
+        characterSprite.src = 'character.png';
+        const PLAYER_SIZE = 80; // Increased size
+        
+        // Load bat weapon sprite
+        const batSprite = new Image();
+        batSprite.src = 'bat.png';
+        const BAT_SIZE = 100;
+        const ATTACK_DURATION = 200; // Faster attack for snappier feel
+        const ATTACK_ANGLE = Math.PI * 0.25; // Reduced swing angle to 45 degrees
+        const ATTACK_COOLDOWN = 350; // Slightly faster cooldown
+        
+        // Smooth animation interpolation
+        let lastWeaponAngle = 0;
+        const ANGLE_SMOOTHING = 0.15;
+        
+        // Attack state
+        let isAttacking = false;
+        let attackStartTime = 0;
+        let attackAngle = 0;
+        
+        // Movement and rotation smoothing
+        const rotationSmoothing = 0.15; // Lower = smoother rotation
+        const movementSmoothing = 0.2; // Lower = smoother movement
+        
+        // Throttle shooting
+        let canShoot = true;
+        
+        // Socket connection
+        let socket = null;
+        let connectionStatus = 'disconnected';
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 3;
+        let pingInterval = null;
+        let connectionTimeout = null;
+        let forceDisconnected = false;
+        
+        // Game state
+        let gameState = {
+            players: {},
+            bullets: [],
+            myId: null,
+            myPlayer: null,
+            playerCount: 0
+        };
+        
+        // Player stats
+        let stats = {
+            kills: 0,
+            deaths: 0,
+            kdr: 0.00
+        };
+        
+        // Input handling
+        const keys = {};
+        let mouse = { x: 0, y: 0, clicked: false };
+        
+        // Visual effects
+        let particles = [];
+        let muzzleFlashes = [];
+        let hitEffects = [];
+        
+        // Kill feed
+        let killFeed = [];
+        
+        // Add this after the game variables section
+        let playerDirection = 1; // 1 for right, -1 for left
+        
+        // Game functions
+        function initOfflineMode() {
+            gameState.myId = 'offline-player';
+            gameState.myPlayer = {
+                id: 'offline-player',
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                health: 100,
+                maxHealth: 100,
+                color: '#00d4ff',
+                name: 'You',
+                angle: 0,
+                kills: 0
+            };
+            gameState.players['offline-player'] = gameState.myPlayer;
+            updateHUD();
+            document.getElementById('playerName').textContent = 'Offline Mode';
+        }
+        
+        function connectToServer() {
+            if (forceDisconnected) {
+                console.log('Connection was force disconnected, switching to offline mode');
+                initOfflineMode();
+                return;
+            }
+
+            if (socket && socket.connected) {
+                console.log('Already connected, skipping connection attempt');
+                return;
+            }
+            
+            // Clean up any existing connection
+            cleanup();
+            updateConnectionStatus('connecting');
+            
+            try {
+                console.log('Attempting to connect to server...');
+                // Use secure WebSocket for production, regular for localhost
+                const isSecure = window.location.protocol === 'https:';
+                const serverUrl = window.location.hostname === 'localhost' ? 
+                    'http://localhost:3000' : 
+                    `${isSecure ? 'https' : 'http'}://${window.location.host}`;
+                
+                console.log('Connecting to:', serverUrl);
+                socket = io(serverUrl, { 
+                    timeout: 5000,
+                    transports: ['websocket'],
+                    reconnection: false,
+                    auth: {
+                        clientTime: Date.now()
+                    },
+                    multiplex: false,
+                    query: {
+                        clientId: Math.random().toString(36).substring(7)
+                    }
+                });
+                
+                // Set connection timeout
+                connectionTimeout = setTimeout(() => {
+                    if (socket && !socket.connected) {
+                        console.log('Connection timeout, cleaning up');
+                        cleanup();
+                        updateConnectionStatus('disconnected');
+                        tryReconnectOrOffline();
+                    }
+                }, 5000);
+                
+                socket.on('connect', () => {
+                    console.log('Connected to server with ID:', socket.id);
+                    clearTimeout(connectionTimeout);
+                    updateConnectionStatus('connected');
+                    gameState.myId = socket.id;
+                    reconnectAttempts = 0;
+                    forceDisconnected = false;
+                    
+                    // Start sending periodic pings to keep the connection alive
+                    pingInterval = setInterval(() => {
+                        if (socket && socket.connected) {
+                            socket.emit('ping');
+                        }
+                    }, 2000);
+                });
+
+                // Add error event handler
+                socket.on('error', (error) => {
+                    console.error('Socket error:', error);
+                });
+
+                // Add connect_error event handler
+                socket.on('connect_error', (error) => {
+                    console.error('Connection error:', error);
+                });
+                
+                // Game events
+                socket.on('gameState', (state) => {
+                    if (state && typeof state === 'object') {
+                        console.log('Received initial game state:', state);
+                        console.log('Number of players in state:', Object.keys(state.players || {}).length);
+                        
+                        // Clear existing state first
+                        gameState.players = {};
+                        gameState.bullets = [];
+                        
+                        // Update with new state
+                        if (state.players) {
+                    gameState.players = state.players;
+                            gameState.myPlayer = state.players[socket.id];
+                            console.log('Current socket ID:', socket.id);
+                            console.log('Players in game:', Object.keys(gameState.players).length);
+                            console.log('My player data:', gameState.myPlayer);
+                        }
+                        
+                        if (Array.isArray(state.bullets)) {
+                            gameState.bullets = state.bullets;
+                        }
+                        
+                        gameState.playerCount = state.playerCount || 0;
+                        
+                        if (gameState.myPlayer) {
+                            console.log('Successfully initialized my player:', gameState.myPlayer);
+                            if (!gameLoopStarted) {
+                                console.log('Starting game loop...');
+                                gameLoopStarted = true;
+                                gameLoop();
+                            }
+                        } else {
+                            console.warn('Warning: My player not found in game state. Socket ID:', socket.id);
+                            console.warn('Available player IDs:', Object.keys(state.players || {}));
+                        }
+                        updateHUD();
+                    } else {
+                        console.error('Received invalid game state:', state);
+                    }
+                });
+                
+                socket.on('playerCountUpdate', (count) => {
+                    gameState.playerCount = count;
+                    updateHUD();
+                });
+                
+                socket.on('playerJoined', (player) => {
+                    console.log('Player joined event received:', player);
+                    if (!gameState.players[player.id]) {
+                        gameState.players[player.id] = initializePlayerState(player);
+                        if (player.id === socket.id) {
+                            gameState.myPlayer = gameState.players[player.id];
+                            gameState.myId = player.id;
+                            if (!gameLoopStarted) {
+                                console.log('Starting game loop after player join...');
+                                gameLoopStarted = true;
+                                gameLoop();
+                            }
+                        }
+                        updateHUD();
+                    }
+                });
+                
+                socket.on('playerLeft', (playerId) => {
+                    console.log('Player left:', playerId);
+                    const player = gameState.players[playerId];
+                    if (player) {
+                        delete gameState.players[playerId];
+                        updateHUD();
+                    }
+                });
+                
+                socket.on('playerUpdate', (player) => {
+                    console.log('Player update:', player);
+                    if (player && player.id) {
+                    gameState.players[player.id] = player;
+                        if (player.id === socket.id) {
+                        gameState.myPlayer = player;
+                            gameState.myId = player.id;
+                        }
+                        updateHUD();
+                    }
+                });
+                
+                socket.on('bulletFired', (bullet) => {
+                    gameState.bullets.push(bullet);
+                    createMuzzleFlash(bullet.startX, bullet.startY);
+                });
+                
+                socket.on('bulletRemoved', (bulletId) => {
+                    gameState.bullets = gameState.bullets.filter(b => b.id !== bulletId);
+                });
+                
+                socket.on('playerHit', (data) => {
+                    createHitEffect(data.x, data.y);
+                    // Update the player's health in the game state
+                    if (data.playerId && gameState.players[data.playerId]) {
+                        gameState.players[data.playerId].health = data.health;
+                        if (data.playerId === gameState.myId) {
+                            gameState.myPlayer.health = data.health;
+                            updateHUD();
+                        }
+                    }
+                });
+                
+                socket.on('playerKilled', (data) => {
+                    const { killer, victim } = data;
+                    addToKillFeed(`${killer.name} eliminated ${victim.name}`);
+                    
+                    if (victim.id === gameState.myId) {
+                        showRespawnScreen(killer.name);
+                        stats.deaths++;
+                        updateStats();
+                    }
+                    
+                    if (killer.id === gameState.myId) {
+                        stats.kills++;
+                        updateStats();
+                    }
+                });
+                
+                socket.on('playerRespawned', (player) => {
+                    gameState.players[player.id] = player;
+                    if (player.id === gameState.myId) {
+                        gameState.myPlayer = player;
+                        hideRespawnScreen();
+                        updateHUD();
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Connection failed:', error);
+                handleDisconnect();
+            }
+        }
+        
+        function updateConnectionStatus(status) {
+            connectionStatus = status;
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.className = `connection-badge ${status}`;
+            
+            switch(status) {
+                case 'connected':
+                    statusEl.textContent = 'Online';
+                    break;
+                case 'connecting':
+                    statusEl.textContent = 'Connecting...';
+                    break;
+                case 'disconnected':
+                    statusEl.textContent = 'Offline';
+                    break;
+            }
+        }
+        
+        // Input event listeners
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        }, { passive: true });
+        
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) {
+                mouse.clicked = true;
+                shoot();
+            }
+        }, { passive: true });
+        
+        canvas.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+                mouse.clicked = false;
+            }
+        }, { passive: true });
+        
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            
+            if (e.key === ' ' || e.key === 'Space') {
+                e.preventDefault();
+                shoot();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+        
+        // Game functions
+        function shoot() {
+            if (!gameState.myPlayer || gameState.myPlayer.health <= 0 || !canShoot) return;
+            
+            canShoot = false;
+            setTimeout(() => { canShoot = true; }, ATTACK_COOLDOWN);
+            
+            const player = gameState.myPlayer;
+            const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+            
+            if (socket && socket.connected) {
+                socket.emit('attack', { angle: angle });
+            }
+            
+            // Start attack animation
+            isAttacking = true;
+            attackStartTime = Date.now();
+            attackAngle = angle;
+            
+            // Enhanced bonk sound with better volume
+            const bonkSound = new Audio('data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAAABmYWN0BAAAAAAAAABkYXRhAAAAAA==');
+            bonkSound.volume = 0.6;
+            bonkSound.play().catch(e => console.log('Audio play failed:', e));
+        }
+        
+        function requestRespawn() {
+            if (socket && socket.connected) {
+                socket.emit('respawn');
+            } else {
+                // Offline mode - respawn locally
+                gameState.myPlayer.health = 100;
+                gameState.myPlayer.x = canvas.width / 2;
+                gameState.myPlayer.y = canvas.height / 2;
+                hideRespawnScreen();
+                updateHUD();
+            }
+        }
+        
+        function showRespawnScreen(killerName) {
+            document.getElementById('killerName').textContent = killerName;
+            document.getElementById('respawnOverlay').style.display = 'flex';
+        }
+        
+        function hideRespawnScreen() {
+            document.getElementById('respawnOverlay').style.display = 'none';
+        }
+        
+        // Visual effects
+        function createMuzzleFlash(x, y) {
+            // Limit number of effects
+            if (muzzleFlashes.length > MAX_EFFECTS) {
+                muzzleFlashes.length = MAX_EFFECTS;
+            }
+            
+            muzzleFlashes.push({
+                x: x,
+                y: y,
+                color: '#ff0',
+                size: 15,
+                life: 5,
+                maxLife: 5
+            });
+        }
+        
+        function createHitEffect(x, y) {
+            if (hitEffects.length >= MAX_EFFECTS) {
+                hitEffects.shift(); // Remove oldest effect if at max
+            }
+            
+            // Create multiple particles for better visual feedback
+            for (let i = 0; i < 5; i++) {
+                hitEffects.push({
+                    x: x + (Math.random() - 0.5) * 20,
+                    y: y + (Math.random() - 0.5) * 20,
+                    life: 15,
+                    maxLife: 15,
+                    size: 3 + Math.random() * 2
+                });
+            }
+        }
+        
+        function createParticle(x, y, color = '#ff4444') {
+            particles.push({
+                x: x,
+                y: y,
+                dx: (Math.random() - 0.5) * 4,
+                dy: (Math.random() - 0.5) * 4,
+                life: 60,
+                maxLife: 60,
+                color: color
+            });
+        }
+        
+        function addToKillFeed(message) {
+            killFeed.unshift({ message, time: Date.now() });
+            if (killFeed.length > 5) killFeed.pop();
+            updateKillFeedDisplay();
+        }
+        
+        function updateKillFeedDisplay() {
+            const killFeedEl = document.getElementById('killFeed');
+            killFeedEl.innerHTML = '';
+            
+            killFeed.forEach(feed => {
+                const div = document.createElement('div');
+                div.className = 'kill-message';
+                div.textContent = feed.message;
+                killFeedEl.appendChild(div);
+            });
+        }
+        
+        function updateHUD() {
+            if (gameState.myPlayer) {
+                const health = Math.max(0, gameState.myPlayer.health);
+                const maxHealth = gameState.myPlayer.maxHealth || 100;
+                
+                document.getElementById('healthText').textContent = `${Math.ceil(health)} / ${maxHealth}`;
+                document.getElementById('healthBar').style.width = (health / maxHealth * 100) + '%';
+                
+                if (gameState.myPlayer.name) {
+                    document.getElementById('playerName').textContent = gameState.myPlayer.name;
+                }
+            }
+            
+            document.getElementById('playersCount').textContent = `${gameState.playerCount} Player${gameState.playerCount !== 1 ? 's' : ''}`;
+        }
+        
+        function updateStats() {
+            stats.kdr = stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : stats.kills.toFixed(2);
+            
+            document.getElementById('killCount').textContent = stats.kills;
+            document.getElementById('deathCount').textContent = stats.deaths;
+            document.getElementById('kdratio').textContent = stats.kdr;
+        }
+        
+        function handleDisconnect() {
+            cleanup();
+            updateConnectionStatus('disconnected');
+            
+            // Clear game state
+            gameState.players = {};
+            gameState.bullets = [];
+            gameState.playerCount = 0;
+            updateHUD();
+            
+            tryReconnectOrOffline();
+        }
+        
+        function tryReconnectOrOffline() {
+            reconnectAttempts++;
+            if (!forceDisconnected && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                console.log(`Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+                setTimeout(connectToServer, 2000);
+                    } else {
+                console.log('Switching to offline mode');
+                if (!gameState.myPlayer) {
+                    initOfflineMode();
+                }
+            }
+        }
+        
+        function showConnectionError(message) {
+            // Remove any existing error messages
+            const existingErrors = document.querySelectorAll('.connection-error');
+            existingErrors.forEach(error => error.remove());
+            
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'connection-error';
+            errorDiv.style.position = 'fixed';
+            errorDiv.style.top = '20px';
+            errorDiv.style.left = '50%';
+            errorDiv.style.transform = 'translateX(-50%)';
+            errorDiv.style.backgroundColor = 'rgba(239, 68, 68, 0.9)';
+            errorDiv.style.color = 'white';
+            errorDiv.style.padding = '12px 24px';
+            errorDiv.style.borderRadius = '8px';
+            errorDiv.style.fontWeight = 'bold';
+            errorDiv.style.zIndex = '1000';
+            errorDiv.textContent = message;
+            
+            document.body.appendChild(errorDiv);
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+        
+        function cleanup() {
+            if (socket) {
+                socket.removeAllListeners();
+                socket.close();
+                socket = null;
+            }
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            clearInterval(pingInterval);
+            clearTimeout(connectionTimeout);
+        }
+        
+        function updateVisualEffects() {
+            // Update hit effects
+            for (let i = hitEffects.length - 1; i >= 0; i--) {
+                const effect = hitEffects[i];
+                effect.life--;
+                if (effect.life <= 0) {
+                    hitEffects.splice(i, 1);
+                }
+            }
+        }
+        
+        // Optimized render functions
+        function drawPlayer(player) {
+            const isMe = player.id === gameState.myId;
+            
+            // Save the current context state
+            ctx.save();
+            
+            // Translate to player position
+            ctx.translate(player.x, player.y);
+            
+            // Scale horizontally based on player direction
+            ctx.scale(playerDirection, 1);
+            
+            // Set transparency
+            ctx.globalAlpha = 0.8;
+            
+            // Draw the character sprite
+            ctx.drawImage(
+                characterSprite,
+                -PLAYER_SIZE/2,
+                -PLAYER_SIZE/2,
+                PLAYER_SIZE,
+                PLAYER_SIZE
+            );
+            
+            // Reset scale before drawing bat
+            ctx.scale(playerDirection, 1); // Reset the player direction scale
+            
+            // Draw the bat weapon
+            if (player.id === gameState.myId) {
+                ctx.save();
+                
+                // Calculate attack animation with smooth interpolation
+                let targetAngle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+                const mouseOnRight = mouse.x > player.x;
+                
+                if (isAttacking) {
+                    const progress = (Date.now() - attackStartTime) / ATTACK_DURATION;
+                    if (progress >= 1) {
+                        isAttacking = false;
+                    } else {
+                        // Smoother swing animation with quadratic easing
+                        const swingProgress = Math.sin(progress * Math.PI);
+                        const swingAmount = mouseOnRight ? ATTACK_ANGLE : -ATTACK_ANGLE;
+                        const swingEase = swingProgress * swingProgress; // Quadratic easing for gentler motion
+                        targetAngle += swingAmount * swingEase;
+                    }
+                }
+                
+                // Smooth angle interpolation
+                let weaponAngle = targetAngle;
+                if (!isAttacking) {
+                    weaponAngle = lastWeaponAngle + (targetAngle - lastWeaponAngle) * ANGLE_SMOOTHING;
+                }
+                lastWeaponAngle = weaponAngle;
+                
+                // Rotate to face mouse
+                ctx.rotate(weaponAngle);
+                
+                // Add 180-degree rotation to fix bat orientation
+                ctx.rotate(Math.PI);
+                
+                // Draw bat with slight motion blur during attack
+                if (isAttacking) {
+                    ctx.globalAlpha = 0.3;
+                    ctx.drawImage(
+                        batSprite,
+                        -BAT_SIZE - 5,
+                        -BAT_SIZE/2,
+                        BAT_SIZE,
+                        BAT_SIZE * 0.8
+                    );
+                    ctx.globalAlpha = 0.8;
+                }
+                
+                // Draw main bat
+                ctx.drawImage(
+                    batSprite,
+                    -BAT_SIZE,
+                    -BAT_SIZE/2,
+                    BAT_SIZE,
+                    BAT_SIZE * 0.8
+                );
+                
+                ctx.restore();
+            }
+            
+            // Reset transparency
+            ctx.globalAlpha = 1.0;
+            
+            // Restore context
+            ctx.restore();
+            
+            // Draw health bar with a background for better visibility
+            const healthBarWidth = 60;
+            const healthBarHeight = 6;
+            const healthPercentage = player.health / player.maxHealth;
+            
+            // Health bar background shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(
+                player.x - healthBarWidth / 2 - 1,
+                player.y - 55 - 1,
+                healthBarWidth + 2,
+                healthBarHeight + 2
+            );
+            
+            // Health bar background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(
+                player.x - healthBarWidth / 2,
+                player.y - 55,
+                healthBarWidth,
+                healthBarHeight
+            );
+            
+            // Health bar
+            ctx.fillStyle = healthPercentage > 0.5 ? '#22c55e' : healthPercentage > 0.25 ? '#eab308' : '#ef4444';
+            ctx.fillRect(
+                player.x - healthBarWidth / 2,
+                player.y - 55,
+                healthBarWidth * healthPercentage,
+                healthBarHeight
+            );
+            
+            // Draw player name with shadow for better visibility
+            ctx.font = '16px Orbitron';
+            ctx.textAlign = 'center';
+            
+            // Name shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillText(player.name, player.x + 1, player.y - 65 + 1);
+            
+            // Name text
+            ctx.fillStyle = isMe ? '#fff' : 'rgba(255, 255, 255, 0.7)';
+            ctx.fillText(player.name, player.x, player.y - 65);
+        }
+        
+        function drawBullet(bullet) {
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+        }
+        
+        function drawHitEffects() {
+            hitEffects.forEach(effect => {
+                const alpha = effect.life / effect.maxLife;
+                const size = effect.size * (1 + (1 - alpha));
+                
+                ctx.beginPath();
+                ctx.arc(effect.x, effect.y, size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 68, 68, ${alpha})`;
+                ctx.fill();
+                
+                effect.life--;
+            });
+            
+            // Clean up dead effects
+            hitEffects = hitEffects.filter(effect => effect.life > 0);
+        }
+        
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            
+            const gridSize = 100; // Increased grid size for better performance
+            
+            for (let x = 0; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            
+            for (let y = 0; y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+        }
+        
+        function drawCrosshair() {
+            const size = 10;
+            const gap = 5;
+            
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            
+            // Draw crosshair lines
+            ctx.beginPath();
+            ctx.moveTo(mouse.x, mouse.y - gap - size);
+            ctx.lineTo(mouse.x, mouse.y - gap);
+            ctx.moveTo(mouse.x, mouse.y + gap);
+            ctx.lineTo(mouse.x, mouse.y + gap + size);
+            ctx.moveTo(mouse.x - gap - size, mouse.y);
+            ctx.lineTo(mouse.x - gap, mouse.y);
+            ctx.moveTo(mouse.x + gap, mouse.y);
+            ctx.lineTo(mouse.x + gap + size, mouse.y);
+            ctx.stroke();
+            
+            // Center dot
+            ctx.beginPath();
+            ctx.arc(mouse.x, mouse.y, 2, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+        }
+        
+        // Optimized game loop
+        let animationFrameId = null;
+        
+        function gameLoop(timestamp) {
+            if (!gameState.myPlayer) {
+                animationFrameId = requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            // Calculate delta time
+            const deltaTime = timestamp - lastFrameTime;
+            lastFrameTime = timestamp;
+            
+            // Skip frame if too much time has passed
+            if (deltaTime > 100) {
+                animationFrameId = requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            // Handle movement
+            const speed = 5;
+            let dx = 0;
+            let dy = 0;
+            
+            if (keys['w'] || keys['arrowup']) dy -= speed;
+            if (keys['s'] || keys['arrowdown']) dy += speed;
+            if (keys['a'] || keys['arrowleft']) {
+                dx -= speed;
+                playerDirection = 1;
+            }
+            if (keys['d'] || keys['arrowright']) {
+                dx += speed;
+                playerDirection = -1;
+            }
+            
+            if (dx !== 0 || dy !== 0) {
+                // Normalize diagonal movement
+                if (dx !== 0 && dy !== 0) {
+                    const normalizer = 1 / Math.sqrt(2);
+                    dx *= normalizer;
+                    dy *= normalizer;
+                }
+                
+                const newX = Math.max(PLAYER_SIZE/2, Math.min(canvas.width - PLAYER_SIZE/2, gameState.myPlayer.x + dx));
+                const newY = Math.max(PLAYER_SIZE/2, Math.min(canvas.height - PLAYER_SIZE/2, gameState.myPlayer.y + dy));
+                
+                if (socket && socket.connected) {
+                    socket.emit('move', { 
+                        x: newX, 
+                        y: newY
+                    });
+                    gameState.myPlayer.targetX = newX;
+                    gameState.myPlayer.targetY = newY;
+                } else {
+                    gameState.myPlayer.targetX = newX;
+                    gameState.myPlayer.targetY = newY;
+                }
+            }
+            
+            // Clear canvas and render
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            drawGrid();
+            
+            // Draw players
+            for (const playerId in gameState.players) {
+                const player = gameState.players[playerId];
+                if (player && player.health > 0) {
+                    drawPlayer(player);
+                }
+            }
+            
+            // Draw effects
+            drawHitEffects();
+            
+            // Draw crosshair
+            drawCrosshair();
+            
+            // Request next frame
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+        
+        // Start game
+                connectToServer();
+    </script>
+</body>
+</html>
