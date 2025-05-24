@@ -522,7 +522,9 @@
             bullets: [],
             myId: null,
             myPlayer: null,
-            playerCount: 0
+            playerCount: 0,
+            lastUpdateTime: 0,
+            serverUpdateRate: 1000 / 60  // Server tick rate
         };
         
         // Player stats
@@ -546,6 +548,11 @@
         
         // Add this after the game variables section
         let playerDirection = 1; // 1 for right, -1 for left
+        
+        // Add movement prediction variables
+        let lastMovementUpdate = 0;
+        const MOVEMENT_UPDATE_RATE = 50; // Send position updates every 50ms
+        const PREDICTION_THRESHOLD = 100; // Maximum prediction distance
         
         // Game functions
         function initOfflineMode() {
@@ -714,12 +721,26 @@
                 });
                 
                 socket.on('playerUpdate', (player) => {
-                    console.log('Player update:', player);
                     if (player && player.id) {
-                    gameState.players[player.id] = player;
                         if (player.id === socket.id) {
-                        gameState.myPlayer = player;
-                            gameState.myId = player.id;
+                            // For own player, only update if server position is too different
+                            const dx = player.x - gameState.myPlayer.x;
+                            const dy = player.y - gameState.myPlayer.y;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+                            
+                            if (distance > PREDICTION_THRESHOLD) {
+                                gameState.myPlayer.x = player.x;
+                                gameState.myPlayer.y = player.y;
+                            }
+                        } else {
+                            // For other players, set target position for interpolation
+                            if (!gameState.players[player.id]) {
+                                gameState.players[player.id] = player;
+                            } else {
+                                gameState.players[player.id].targetX = player.x;
+                                gameState.players[player.id].targetY = player.y;
+                                gameState.players[player.id].health = player.health;
+                            }
                         }
                         updateHUD();
                     }
@@ -1264,8 +1285,8 @@
                 return;
             }
 
-            // Handle movement
-            const speed = 5;
+            // Handle movement with improved prediction
+            const speed = 5 * (deltaTime / 16); // Scale speed with delta time
             let dx = 0;
             let dy = 0;
             
@@ -1291,16 +1312,36 @@
                 const newX = Math.max(PLAYER_SIZE/2, Math.min(canvas.width - PLAYER_SIZE/2, gameState.myPlayer.x + dx));
                 const newY = Math.max(PLAYER_SIZE/2, Math.min(canvas.height - PLAYER_SIZE/2, gameState.myPlayer.y + dy));
                 
-                if (socket && socket.connected) {
-                    socket.emit('move', { 
-                        x: newX, 
-                        y: newY
-                    });
-                    gameState.myPlayer.targetX = newX;
-                    gameState.myPlayer.targetY = newY;
-                } else {
-                    gameState.myPlayer.targetX = newX;
-                    gameState.myPlayer.targetY = newY;
+                // Update local position immediately for responsiveness
+                gameState.myPlayer.x = newX;
+                gameState.myPlayer.y = newY;
+
+                // Send updates to server at controlled rate
+                const now = Date.now();
+                if (now - lastMovementUpdate >= MOVEMENT_UPDATE_RATE) {
+                    if (socket && socket.connected) {
+                        socket.emit('move', { 
+                            x: newX, 
+                            y: newY,
+                            timestamp: now
+                        });
+                    }
+                    lastMovementUpdate = now;
+                }
+            }
+
+            // Interpolate other players' positions
+            for (const playerId in gameState.players) {
+                if (playerId === gameState.myId) continue;
+                
+                const player = gameState.players[playerId];
+                if (!player || player.health <= 0) continue;
+
+                // If player has target position, interpolate towards it
+                if (player.targetX !== undefined && player.targetY !== undefined) {
+                    const interpolationFactor = 0.3;
+                    player.x += (player.targetX - player.x) * interpolationFactor;
+                    player.y += (player.targetY - player.y) * interpolationFactor;
                 }
             }
             

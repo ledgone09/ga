@@ -202,11 +202,30 @@ io.on('connection', (socket) => {
     socket.on('move', (data) => {
         const player = gameState.players.get(socket.id);
         if (player && player.health > 0) {
-            player.x = data.x;
-            player.y = data.y;
-            player.angle = data.angle;
-            player.lastActivity = Date.now();
-            io.emit('playerUpdate', player);
+            // Validate movement
+            const dx = data.x - player.x;
+            const dy = data.y - player.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Basic speed validation (adjust these values as needed)
+            const maxSpeed = 10; // Maximum allowed speed per update
+            const timeSinceLastUpdate = Date.now() - player.lastActivity;
+            const allowedDistance = maxSpeed * (timeSinceLastUpdate / 1000);
+            
+            if (distance <= allowedDistance) {
+                player.x = data.x;
+                player.y = data.y;
+                player.lastActivity = Date.now();
+                
+                // Broadcast less frequently to reduce network traffic
+                if (!player.lastBroadcast || Date.now() - player.lastBroadcast >= 50) {
+                    io.emit('playerUpdate', player);
+                    player.lastBroadcast = Date.now();
+                }
+            } else {
+                // If movement is invalid, force client to correct position
+                socket.emit('playerUpdate', player);
+            }
         }
     });
 
