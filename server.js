@@ -124,7 +124,7 @@ io.on('connection', (socket) => {
             const now = Date.now();
             const timeSinceLastUpdate = now - (player.lastMovementUpdate || 0);
             
-            if (timeSinceLastUpdate >= 50) { // Reduced to ~20 updates per second
+            if (timeSinceLastUpdate >= 16) { // Increased to ~60 updates per second for smoother movement
                 // Update server-side position (for hit detection, etc.)
                 player.x = data.x;
                 player.y = data.y;

@@ -479,7 +479,7 @@
         // Missing constants and variables
         const PLAYER_SIZE = 100;
         const BAT_SIZE = 100;
-        const ATTACK_COOLDOWN = 500;
+        const ATTACK_COOLDOWN = 50;
         const ATTACK_DURATION = 200;
         const ATTACK_ANGLE = Math.PI / 3;
         const ANGLE_SMOOTHING = 0.15;
@@ -544,15 +544,17 @@
         
         // Movement and networking settings
         const BASE_SPEED = 5;
-        const MOVEMENT_UPDATE_RATE = 100; // Reduced to 100ms (10 updates per second)
+        const MOVEMENT_UPDATE_RATE = 50; // Reduced to 50ms for more responsive updates
         const INTERPOLATION_SPEED = 0.2;
         const CORRECTION_THRESHOLD = 15; // Increased threshold (not used for local player anymore)
-        const MIN_MOVEMENT_DISTANCE = 5; // Increased to 5 pixels minimum movement
+        const MIN_MOVEMENT_DISTANCE = 3; // Reduced back to 3 pixels for more responsive updates
+        const OTHER_PLAYER_INTERPOLATION = 0.3; // Interpolation factor for other players
         let lastMovementUpdate = 0;
         let pendingUpdates = new Map();
         let lastServerPosition = null;
         let lastProcessedInput = 0;
         let lastSentPosition = { x: 0, y: 0 };
+        let playerInterpolationData = {}; // Store interpolation data for other players
         
         // Socket connection
         let socket = null;
@@ -659,12 +661,27 @@
                 socket.on('playerUpdate', (player) => {
                     console.log('Player update received:', player);
                     
-                    // Always update the players collection
-                    gameState.players[player.id] = player;
-                    
-                    // If this is my player, NEVER update position from server (prevents rubber banding)
-                    // Only update non-position properties like health, color, etc.
-                    if (player.id === socket.id) {
+                    // For other players, use interpolation for smooth movement
+                    if (player.id !== socket.id) {
+                        const existingPlayer = gameState.players[player.id];
+                        
+                        if (existingPlayer) {
+                            // Store interpolation data
+                            playerInterpolationData[player.id] = {
+                                startX: existingPlayer.x,
+                                startY: existingPlayer.y,
+                                targetX: player.x,
+                                targetY: player.y,
+                                startTime: Date.now()
+                            };
+                        }
+                        
+                        // Update the player data
+                        gameState.players[player.id] = player;
+                        console.log('Updating other player:', player.id);
+                    } else {
+                        // For my player, only update non-position properties
+                        gameState.players[player.id] = player;
                         console.log('Updating my player properties (not position)');
                         gameState.myPlayer.health = player.health;
                         gameState.myPlayer.maxHealth = player.maxHealth;
@@ -672,9 +689,6 @@
                         gameState.myPlayer.name = player.name;
                         gameState.myPlayer.kills = player.kills;
                         // Keep local position - NEVER update x,y from server
-                    } else {
-                        console.log('Updating other player:', player.id);
-                        // For other players, update everything including position
                     }
                     updateHUD();
                 });
@@ -829,6 +843,32 @@
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             drawGrid();
+            
+            // Update interpolated positions for other players
+            const now = Date.now();
+            for (const playerId in playerInterpolationData) {
+                const interpData = playerInterpolationData[playerId];
+                const player = gameState.players[playerId];
+                
+                if (player && interpData) {
+                    const elapsed = now - interpData.startTime;
+                    const duration = 100; // Interpolation duration in ms
+                    
+                    if (elapsed < duration) {
+                        // Interpolate position
+                        const progress = elapsed / duration;
+                        const smoothProgress = progress * progress * (3 - 2 * progress); // Smooth step function
+                        
+                        player.x = interpData.startX + (interpData.targetX - interpData.startX) * smoothProgress;
+                        player.y = interpData.startY + (interpData.targetY - interpData.startY) * smoothProgress;
+                    } else {
+                        // Interpolation complete, snap to target
+                        player.x = interpData.targetX;
+                        player.y = interpData.targetY;
+                        delete playerInterpolationData[playerId];
+                    }
+                }
+            }
             
             // Draw all players
             let myPlayerDrawn = false;
