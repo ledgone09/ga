@@ -545,10 +545,10 @@
         
         // Movement and networking settings
         const BASE_SPEED = 5;
-        const MOVEMENT_UPDATE_RATE = 50; // Reduced from 16 to 50ms to send fewer updates
+        const MOVEMENT_UPDATE_RATE = 100; // Reduced to 100ms (10 updates per second)
         const INTERPOLATION_SPEED = 0.2;
-        const CORRECTION_THRESHOLD = 10; // Increased threshold to reduce corrections
-        const MIN_MOVEMENT_DISTANCE = 3; // Only send updates if moved at least 3 pixels
+        const CORRECTION_THRESHOLD = 15; // Increased threshold (not used for local player anymore)
+        const MIN_MOVEMENT_DISTANCE = 5; // Increased to 5 pixels minimum movement
         let lastMovementUpdate = 0;
         let pendingUpdates = new Map();
         let lastServerPosition = null;
@@ -645,32 +645,19 @@
                     // Always update the players collection
                     gameState.players[player.id] = player;
                     
-                    // If this is my player, only apply server correction if there's a significant difference
+                    // If this is my player, NEVER update position from server (prevents rubber banding)
+                    // Only update non-position properties like health, color, etc.
                     if (player.id === socket.id) {
-                        const serverX = player.x;
-                        const serverY = player.y;
-                        const currentX = gameState.myPlayer.x;
-                        const currentY = gameState.myPlayer.y;
-                        
-                        const distance = Math.sqrt(
-                            Math.pow(serverX - currentX, 2) + 
-                            Math.pow(serverY - currentY, 2)
-                        );
-                        
-                        // Only apply server correction if the difference is significant
-                        if (distance > CORRECTION_THRESHOLD) {
-                            console.log('Applying server correction - distance:', distance);
-                            // Smoothly interpolate to server position instead of snapping
-                            gameState.myPlayer.x = currentX + (serverX - currentX) * 0.3;
-                            gameState.myPlayer.y = currentY + (serverY - currentY) * 0.3;
-                        } else {
-                            // Small differences, just update other properties but keep local position
-                            gameState.myPlayer.health = player.health;
-                            gameState.myPlayer.color = player.color;
-                            gameState.myPlayer.name = player.name;
-                        }
+                        console.log('Updating my player properties (not position)');
+                        gameState.myPlayer.health = player.health;
+                        gameState.myPlayer.maxHealth = player.maxHealth;
+                        gameState.myPlayer.color = player.color;
+                        gameState.myPlayer.name = player.name;
+                        gameState.myPlayer.kills = player.kills;
+                        // Keep local position - NEVER update x,y from server
                     } else {
                         console.log('Updating other player:', player.id);
+                        // For other players, update everything including position
                     }
                     updateHUD();
                 });
@@ -757,11 +744,6 @@
                 playerDirection = -1;
             }
 
-            // Debug movement input
-            if (dx !== 0 || dy !== 0) {
-                console.log('Movement input detected:', { dx, dy, keys });
-            }
-
             // If there's movement input
             if (dx !== 0 || dy !== 0) {
                 // Normalize diagonal movement
@@ -794,15 +776,13 @@
 
                 if (timeSinceLastUpdate >= MOVEMENT_UPDATE_RATE && distanceMoved >= MIN_MOVEMENT_DISTANCE) {
                     if (socket && socket.connected) {
-                        console.log('Sending movement to server:', { x: newX, y: newY });
+                        // Reduced logging frequency
                         socket.emit('move', {
                             x: newX,
                             y: newY
                         });
                         lastMovementUpdate = now;
                         lastSentPosition = { x: newX, y: newY };
-                    } else {
-                        console.log('Not connected to server, moving locally');
                     }
                 }
             }

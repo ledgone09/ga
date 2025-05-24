@@ -123,14 +123,15 @@ io.on('connection', (socket) => {
             const now = Date.now();
             const timeSinceLastUpdate = now - (player.lastMovementUpdate || 0);
             
-            if (timeSinceLastUpdate >= 30) { // Limit to ~33 updates per second
-                console.log('Player movement:', { id: socket.id, from: { x: player.x, y: player.y }, to: { x: data.x, y: data.y } });
+            if (timeSinceLastUpdate >= 50) { // Reduced to ~20 updates per second
+                // Update server-side position (for hit detection, etc.)
                 player.x = data.x;
                 player.y = data.y;
                 player.lastActivity = now;
                 player.lastMovementUpdate = now;
                 
-                // Only broadcast to other players, not back to sender
+                // IMPORTANT: Only broadcast to OTHER players, never back to sender
+                // This prevents rubber banding completely
                 socket.broadcast.emit('playerUpdate', {
                     id: socket.id,
                     x: player.x,
