@@ -478,8 +478,8 @@
         let playerDirection = 1;
         
         // Missing constants and variables
-        const PLAYER_SIZE = 80;
-        const BAT_SIZE = 80;
+        const PLAYER_SIZE = 100;
+        const BAT_SIZE = 100;
         const ATTACK_COOLDOWN = 500;
         const ATTACK_DURATION = 200;
         const ATTACK_ANGLE = Math.PI / 3;
@@ -1105,6 +1105,9 @@
                 let targetAngle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
                 const mouseOnRight = mouse.x > player.x;
                 
+                // Determine player facing direction based on mouse position
+                const facingRight = mouseOnRight;
+                
                 if (isAttacking) {
                     const progress = (Date.now() - attackStartTime) / ATTACK_DURATION;
                     if (progress >= 1) {
@@ -1112,8 +1115,8 @@
                     } else {
                         // Smoother swing animation with quadratic easing
                         const swingProgress = Math.sin(progress * Math.PI);
-                        const swingAmount = mouseOnRight ? ATTACK_ANGLE : -ATTACK_ANGLE;
-                        const swingEase = swingProgress * swingProgress; // Quadratic easing for gentler motion
+                        const swingAmount = facingRight ? ATTACK_ANGLE : -ATTACK_ANGLE;
+                        const swingEase = swingProgress * swingProgress;
                         targetAngle += swingAmount * swingEase;
                     }
                 }
@@ -1125,46 +1128,44 @@
                 }
                 lastWeaponAngle = weaponAngle;
                 
-                // Rotate to face mouse
+                // Reset any previous transformations
+                ctx.scale(1, 1);
+                
+                // Rotate to weapon angle
                 ctx.rotate(weaponAngle);
                 
-                // Add 180-degree rotation to fix bat orientation
-                ctx.rotate(Math.PI);
+                // Adjust bat orientation based on which side of player we're on
+                let batOffsetX = -BAT_SIZE * 0.8;
+                let batOffsetY = -BAT_SIZE/2;
                 
-                // Draw bat with slight motion blur during attack
+                // If mouse is on left side, flip the bat orientation
+                if (!facingRight) {
+                    ctx.rotate(Math.PI); // Flip the bat 180 degrees
+                    batOffsetX = -BAT_SIZE * 0.2; // Adjust offset for flipped orientation
+                }
+                
+                // Draw bat with motion blur during attack
                 if (isAttacking) {
                     ctx.globalAlpha = 0.3;
                     if (batSprite && batSprite.complete && batSprite.naturalHeight !== 0) {
-                        ctx.drawImage(
-                            batSprite,
-                            -BAT_SIZE - 5,
-                            -BAT_SIZE/2,
-                            BAT_SIZE,
-                            BAT_SIZE * 0.8
-                        );
+                        ctx.drawImage(batSprite, batOffsetX - 5, batOffsetY, BAT_SIZE, BAT_SIZE * 0.8);
                     } else {
                         // Fallback bat
                         ctx.fillStyle = '#8B4513';
-                        ctx.fillRect(-BAT_SIZE - 5, -4, BAT_SIZE * 0.8, 8);
+                        ctx.fillRect(batOffsetX - 5, -4, BAT_SIZE * 0.8, 8);
                     }
                     ctx.globalAlpha = 0.8;
                 }
                 
                 // Draw main bat
                 if (batSprite && batSprite.complete && batSprite.naturalHeight !== 0) {
-                    ctx.drawImage(
-                        batSprite,
-                        -BAT_SIZE,
-                        -BAT_SIZE/2,
-                        BAT_SIZE,
-                        BAT_SIZE * 0.8
-                    );
+                    ctx.drawImage(batSprite, batOffsetX, batOffsetY, BAT_SIZE, BAT_SIZE * 0.8);
                 } else {
                     // Fallback bat
                     ctx.fillStyle = '#8B4513';
-                    ctx.fillRect(-BAT_SIZE, -4, BAT_SIZE * 0.8, 8);
+                    ctx.fillRect(batOffsetX, -4, BAT_SIZE * 0.8, 8);
                     ctx.fillStyle = '#654321';
-                    ctx.fillRect(-BAT_SIZE * 0.2, -2, BAT_SIZE * 0.2, 4);
+                    ctx.fillRect(batOffsetX + BAT_SIZE * 0.6, -2, BAT_SIZE * 0.2, 4);
                 }
                 
                 ctx.restore();
@@ -1185,7 +1186,7 @@
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(
                 player.x - healthBarWidth / 2 - 1,
-                player.y - 75 - 1,
+                player.y - 90 - 1,
                 healthBarWidth + 2,
                 healthBarHeight + 2
             );
@@ -1194,7 +1195,7 @@
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.fillRect(
                 player.x - healthBarWidth / 2,
-                player.y - 75,
+                player.y - 90,
                 healthBarWidth,
                 healthBarHeight
             );
@@ -1203,7 +1204,7 @@
             ctx.fillStyle = healthPercentage > 0.5 ? '#22c55e' : healthPercentage > 0.25 ? '#eab308' : '#ef4444';
             ctx.fillRect(
                 player.x - healthBarWidth / 2,
-                player.y - 75,
+                player.y - 90,
                 healthBarWidth * healthPercentage,
                 healthBarHeight
             );
@@ -1214,11 +1215,11 @@
             
             // Name shadow
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillText(player.name, player.x + 1, player.y - 85 + 1);
+            ctx.fillText(player.name, player.x + 1, player.y - 100 + 1);
             
             // Name text
             ctx.fillStyle = isMe ? '#fff' : 'rgba(255, 255, 255, 0.7)';
-            ctx.fillText(player.name, player.x, player.y - 85);
+            ctx.fillText(player.name, player.x, player.y - 100);
         }
         
         function drawBullet(bullet) {
