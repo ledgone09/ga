@@ -90,6 +90,7 @@ io.on('connection', (socket) => {
         name: `Player ${playerNumber}`,
         angle: 0,
         direction: 1, // Add default direction (facing left)
+        weaponAngle: 0, // Add default weapon angle
         kills: 0,
         lastActivity: Date.now()
     };
@@ -113,7 +114,17 @@ io.on('connection', (socket) => {
     
     console.log('Sending initial state:', currentState);
     socket.emit('gameState', currentState);
-    io.emit('playerUpdate', newPlayer);
+    io.emit('playerUpdate', {
+        id: newPlayer.id,
+        x: newPlayer.x,
+        y: newPlayer.y,
+        health: newPlayer.health,
+        maxHealth: newPlayer.maxHealth,
+        color: newPlayer.color,
+        name: newPlayer.name,
+        direction: newPlayer.direction,
+        weaponAngle: newPlayer.weaponAngle || 0
+    });
     io.emit('playerCountUpdate', gameState.playerCount);
 
     // Handle movement
@@ -131,6 +142,9 @@ io.on('connection', (socket) => {
                 if (data.direction !== undefined) {
                     player.direction = data.direction;
                 }
+                if (data.weaponAngle !== undefined) {
+                    player.weaponAngle = data.weaponAngle;
+                }
                 player.lastActivity = now;
                 player.lastMovementUpdate = now;
                 
@@ -141,7 +155,9 @@ io.on('connection', (socket) => {
                     x: player.x,
                     y: player.y,
                     direction: player.direction,
+                    weaponAngle: player.weaponAngle,
                     health: player.health,
+                    maxHealth: player.maxHealth,
                     color: player.color,
                     name: player.name
                 });

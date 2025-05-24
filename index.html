@@ -826,11 +826,15 @@
 
                 if (timeSinceLastUpdate >= MOVEMENT_UPDATE_RATE && distanceMoved >= MIN_MOVEMENT_DISTANCE) {
                     if (socket && socket.connected) {
+                        // Calculate current weapon angle for other players to see
+                        const weaponAngle = Math.atan2(mouse.y - gameState.myPlayer.y, mouse.x - gameState.myPlayer.x);
+                        
                         // Reduced logging frequency
                         socket.emit('move', {
                             x: newX,
                             y: newY,
-                            direction: gameState.myPlayer.direction
+                            direction: gameState.myPlayer.direction,
+                            weaponAngle: weaponAngle
                         });
                         lastMovementUpdate = now;
                         lastSentPosition = { x: newX, y: newY };
@@ -1263,16 +1267,16 @@
                 
                 ctx.restore();
             } else {
-                // Draw weapon for other players (simplified)
+                // Draw weapon for other players using their real weapon angle
                 ctx.save();
                 
-                // Simple weapon angle (could be enhanced with server-sent angle data)
-                const weaponAngle = player.angle || 0;
+                // Use the player's actual weapon angle from server data
+                const weaponAngle = player.weaponAngle || 0;
                 
                 ctx.rotate(weaponAngle);
                 ctx.rotate(Math.PI);
                 
-                // Draw simple bat for other players
+                // Draw bat for other players
                 if (batSprite && batSprite.complete && batSprite.naturalHeight !== 0) {
                     ctx.drawImage(
                         batSprite,
@@ -1301,13 +1305,15 @@
             // Draw health bar with a background for better visibility
             const healthBarWidth = 60;
             const healthBarHeight = 6;
-            const healthPercentage = player.health / player.maxHealth;
+            const playerHealth = player.health || 0;
+            const playerMaxHealth = player.maxHealth || 100;
+            const healthPercentage = Math.max(0, Math.min(1, playerHealth / playerMaxHealth));
             
             // Health bar background shadow
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(
                 player.x - healthBarWidth / 2 - 1,
-                player.y - 90 - 1,
+                player.y - 90 - 1, // Moved up more for bigger sprite
                 healthBarWidth + 2,
                 healthBarHeight + 2
             );
@@ -1316,7 +1322,7 @@
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.fillRect(
                 player.x - healthBarWidth / 2,
-                player.y - 90,
+                player.y - 90, // Moved up more for bigger sprite
                 healthBarWidth,
                 healthBarHeight
             );
@@ -1325,7 +1331,7 @@
             ctx.fillStyle = healthPercentage > 0.5 ? '#22c55e' : healthPercentage > 0.25 ? '#eab308' : '#ef4444';
             ctx.fillRect(
                 player.x - healthBarWidth / 2,
-                player.y - 90,
+                player.y - 90, // Moved up more for bigger sprite
                 healthBarWidth * healthPercentage,
                 healthBarHeight
             );
