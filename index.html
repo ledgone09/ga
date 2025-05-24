@@ -633,22 +633,23 @@
                 }, 5000);
 
                 socket.on('gameState', (state) => {
-                    console.log('Received game state:', state);
+                    console.log('📦 Received game state:', state);
                     if (state && state.players) {
                         gameState.players = state.players;
                         gameState.myPlayer = state.players[socket.id];
                         gameState.playerCount = state.playerCount;
                         
-                        // Ensure myPlayer is also in the players collection
+                        // Ensure myPlayer is also in the players collection and they're the same object
                         if (gameState.myPlayer) {
                             gameState.players[socket.id] = gameState.myPlayer;
+                            console.log('🎯 My player initialized at:', { x: gameState.myPlayer.x, y: gameState.myPlayer.y });
                         }
                         
-                        console.log('My player:', gameState.myPlayer);
-                        console.log('All players:', gameState.players);
+                        console.log('👤 My player:', gameState.myPlayer);
+                        console.log('👥 All players:', gameState.players);
                         
                         if (!gameLoopStarted && gameState.myPlayer) {
-                            console.log('Starting game loop');
+                            console.log('🎮 Starting game loop');
                             gameLoopStarted = true;
                             requestAnimationFrame(gameLoop);
                         }
@@ -761,6 +762,11 @@
                 playerDirection = -1;
             }
 
+            // Debug movement input
+            if (dx !== 0 || dy !== 0) {
+                console.log('🎮 Movement input detected:', { dx, dy, playerPos: { x: gameState.myPlayer?.x, y: gameState.myPlayer?.y } });
+            }
+
             // If there's movement input
             if (dx !== 0 || dy !== 0) {
                 // Normalize diagonal movement
@@ -782,6 +788,13 @@
                 // Update local position immediately for smooth movement
                 gameState.myPlayer.x = newX;
                 gameState.myPlayer.y = newY;
+                
+                // IMPORTANT: Also update the position in the players collection
+                // This ensures the rendering loop sees the updated position
+                if (gameState.players[gameState.myId]) {
+                    gameState.players[gameState.myId].x = newX;
+                    gameState.players[gameState.myId].y = newY;
+                }
 
                 // Only send update to server if enough time has passed and significant movement occurred
                 const now = Date.now();
@@ -811,16 +824,21 @@
             drawGrid();
             
             // Draw all players
+            let myPlayerDrawn = false;
             for (const playerId in gameState.players) {
                 const player = gameState.players[playerId];
                 if (player && player.health > 0) {
                     drawPlayer(player);
+                    if (playerId === gameState.myId) {
+                        myPlayerDrawn = true;
+                        console.log('🎨 Drawing my player from players collection at:', { x: player.x, y: player.y });
+                    }
                 }
             }
             
-            // Also draw myPlayer if it's not in the players collection (fallback)
-            if (gameState.myPlayer && gameState.myPlayer.health > 0 && !gameState.players[gameState.myId]) {
-                console.log('Drawing myPlayer as fallback:', gameState.myPlayer);
+            // Ensure myPlayer is always drawn (fallback)
+            if (!myPlayerDrawn && gameState.myPlayer && gameState.myPlayer.health > 0) {
+                console.log('🎨 Drawing myPlayer as fallback at:', { x: gameState.myPlayer.x, y: gameState.myPlayer.y });
                 drawPlayer(gameState.myPlayer);
             }
 
