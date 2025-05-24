@@ -207,7 +207,7 @@ io.on('connection', (socket) => {
             const dy = data.y - player.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            // More lenient speed validation
+            // More lenient speed validation with input sequence
             const maxSpeed = 15; // Increased max speed
             const timeSinceLastUpdate = Date.now() - (player.lastActivity || Date.now());
             const allowedDistance = maxSpeed * (timeSinceLastUpdate / 1000) + 20; // Added buffer
@@ -216,15 +216,23 @@ io.on('connection', (socket) => {
                 player.x = data.x;
                 player.y = data.y;
                 player.lastActivity = data.timestamp || Date.now();
+                player.lastInputSequence = data.inputSequence;
                 
-                // Broadcast more frequently
-                io.emit('playerUpdate', player);
+                // Broadcast to all clients including sender
+                io.emit('playerUpdate', {
+                    id: socket.id,
+                    x: player.x,
+                    y: player.y,
+                    health: player.health,
+                    inputSequence: data.inputSequence
+                });
             } else {
-                // If movement is invalid, force client to correct position but with interpolation
+                // If movement is invalid, send correction to client
                 socket.emit('serverCorrection', {
                     x: player.x,
                     y: player.y,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    lastValidInputSequence: player.lastInputSequence
                 });
             }
         }

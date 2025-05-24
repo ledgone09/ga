@@ -507,6 +507,16 @@
         // Throttle shooting
         let canShoot = true;
         
+        // Movement and networking settings
+        const BASE_SPEED = 5;
+        const MOVEMENT_UPDATE_RATE = 16; // 60fps
+        const INTERPOLATION_SPEED = 0.2;
+        const CORRECTION_THRESHOLD = 5;
+        let lastMovementUpdate = 0;
+        let pendingUpdates = new Map();
+        let lastServerPosition = null;
+        let lastProcessedInput = 0;
+        
         // Socket connection
         let socket = null;
         let connectionStatus = 'disconnected';
@@ -523,8 +533,7 @@
             myId: null,
             myPlayer: null,
             playerCount: 0,
-            lastUpdateTime: 0,
-            serverUpdateRate: 1000 / 60  // Server tick rate
+            lastUpdateTime: 0
         };
         
         // Player stats
@@ -549,38 +558,248 @@
         // Add this after the game variables section
         let playerDirection = 1; // 1 for right, -1 for left
         
-        // Add movement prediction variables
-        let lastMovementUpdate = 0;
-        const MOVEMENT_UPDATE_RATE = 16; // Increased update rate (about 60fps)
-        const PREDICTION_THRESHOLD = 150; // Increased prediction threshold
-        const INTERPOLATION_SPEED = 0.25; // Smooth interpolation speed
-        let pendingUpdates = new Map(); // Track pending position updates
-        let lastServerPosition = null; // Last confirmed server position
-        
-        // Add server correction handler
-        socket.on('serverCorrection', (correction) => {
-            const timeDiff = Date.now() - correction.timestamp;
-            if (timeDiff > 1000) return; // Ignore very old corrections
-            
-            // Smoothly interpolate to the correct position
-            if (gameState.myPlayer) {
+        function connectToServer() {
+            if (forceDisconnected || (socket && socket.connected)) {
+                console.log('Already connected or force disconnected');
+                if (forceDisconnected) initOfflineMode();
+                return;
+            }
+
+            cleanup();
+            updateConnectionStatus('connecting');
+
+            try {
+                console.log('Connecting to server...');
+                const serverUrl = window.location.hostname === 'localhost' ? 
+                    'http://localhost:3000' : 
+                    `${window.location.protocol === 'https:' ? 'https' : 'http'}://${window.location.host}`;
+
+                socket = io(serverUrl, {
+                    timeout: 5000,
+                    transports: ['websocket'],
+                    reconnection: false,
+                    multiplex: false
+                });
+
+                setupSocketHandlers();
+                
+                connectionTimeout = setTimeout(() => {
+                    if (socket && !socket.connected) {
+                        cleanup();
+                        updateConnectionStatus('disconnected');
+                        tryReconnectOrOffline();
+                    }
+                }, 5000);
+
+            } catch (error) {
+                console.error('Connection failed:', error);
+                handleDisconnect();
+            }
+        }
+
+        function setupSocketHandlers() {
+            if (!socket) return;
+
+            socket.on('connect', () => {
+                console.log('Connected to server with ID:', socket.id);
+                clearTimeout(connectionTimeout);
+                updateConnectionStatus('connected');
+                gameState.myId = socket.id;
+                reconnectAttempts = 0;
+                forceDisconnected = false;
+                
+                pingInterval = setInterval(() => {
+                    if (socket && socket.connected) socket.emit('ping');
+                }, 2000);
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Disconnected from server');
+                handleDisconnect();
+            });
+
+            socket.on('error', (error) => {
+                console.error('Socket error:', error);
+            });
+
+            socket.on('connect_error', (error) => {
+                console.error('Connection error:', error);
+            });
+
+            socket.on('serverCorrection', (correction) => {
+                if (!gameState.myPlayer) return;
+                
+                const timeDiff = Date.now() - correction.timestamp;
+                if (timeDiff > 1000) return;
+
                 lastServerPosition = {
                     x: correction.x,
                     y: correction.y,
                     timestamp: correction.timestamp
                 };
-                
-                // Calculate a smoother correction
+
+                // Apply smooth correction
                 const dx = correction.x - gameState.myPlayer.x;
                 const dy = correction.y - gameState.myPlayer.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                if (distance > 5) { // Only correct if difference is significant
+
+                if (distance > CORRECTION_THRESHOLD) {
                     gameState.myPlayer.x += dx * INTERPOLATION_SPEED;
                     gameState.myPlayer.y += dy * INTERPOLATION_SPEED;
                 }
+            });
+
+            socket.on('gameState', (state) => {
+                if (!state || typeof state !== 'object') {
+                    console.error('Invalid game state:', state);
+                    return;
+                }
+
+                gameState.players = state.players || {};
+                gameState.myPlayer = state.players[socket.id];
+                gameState.playerCount = state.playerCount || 0;
+
+                if (gameState.myPlayer && !gameLoopStarted) {
+                    console.log('Starting game loop...');
+                    gameLoopStarted = true;
+                    gameLoop();
+                }
+
+                updateHUD();
+            });
+
+            socket.on('playerUpdate', (player) => {
+                if (!player || !player.id) return;
+                
+                if (player.id === socket.id) {
+                    // Server correction for own player
+                    if (!gameState.myPlayer) return;
+                    
+                    const dx = player.x - gameState.myPlayer.x;
+                    const dy = player.y - gameState.myPlayer.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance > CORRECTION_THRESHOLD) {
+                        gameState.myPlayer.x += dx * INTERPOLATION_SPEED;
+                        gameState.myPlayer.y += dy * INTERPOLATION_SPEED;
+                    }
+                } else {
+                    // Update other players
+                    if (!gameState.players[player.id]) {
+                        gameState.players[player.id] = player;
+                    } else {
+                        const existingPlayer = gameState.players[player.id];
+                        existingPlayer.targetX = player.x;
+                        existingPlayer.targetY = player.y;
+                        existingPlayer.health = player.health;
+                    }
+                }
+                updateHUD();
+            });
+        }
+
+        function gameLoop(timestamp) {
+            if (!gameState.myPlayer) {
+                animationFrameId = requestAnimationFrame(gameLoop);
+                return;
             }
-        });
+
+            const deltaTime = timestamp - lastFrameTime;
+            lastFrameTime = timestamp;
+
+            if (deltaTime > 100) {
+                animationFrameId = requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            // Movement handling
+            const speed = BASE_SPEED * (deltaTime / 16);
+            let dx = 0;
+            let dy = 0;
+
+            if (keys['w'] || keys['arrowup']) dy -= speed;
+            if (keys['s'] || keys['arrowdown']) dy += speed;
+            if (keys['a'] || keys['arrowleft']) {
+                dx -= speed;
+                playerDirection = 1;
+            }
+            if (keys['d'] || keys['arrowright']) {
+                dx += speed;
+                playerDirection = -1;
+            }
+
+            if (dx !== 0 || dy !== 0) {
+                // Normalize diagonal movement
+                if (dx !== 0 && dy !== 0) {
+                    const normalizer = 1 / Math.sqrt(2);
+                    dx *= normalizer;
+                    dy *= normalizer;
+                }
+
+                // Update local position
+                const newX = Math.max(PLAYER_SIZE/2, Math.min(canvas.width - PLAYER_SIZE/2, gameState.myPlayer.x + dx));
+                const newY = Math.max(PLAYER_SIZE/2, Math.min(canvas.height - PLAYER_SIZE/2, gameState.myPlayer.y + dy));
+
+                gameState.myPlayer.x = newX;
+                gameState.myPlayer.y = newY;
+
+                // Send position updates
+                const now = Date.now();
+                if (now - lastMovementUpdate >= MOVEMENT_UPDATE_RATE) {
+                    if (socket && socket.connected) {
+                        const update = {
+                            x: newX,
+                            y: newY,
+                            timestamp: now,
+                            inputSequence: ++lastProcessedInput
+                        };
+
+                        socket.emit('move', update);
+                        pendingUpdates.set(lastProcessedInput, update);
+
+                        // Clean up old updates
+                        for (const [seq, update] of pendingUpdates) {
+                            if (now - update.timestamp > 1000) {
+                                pendingUpdates.delete(seq);
+                            }
+                        }
+                    }
+                    lastMovementUpdate = now;
+                }
+            }
+
+            // Interpolate other players
+            for (const playerId in gameState.players) {
+                if (playerId === gameState.myId) continue;
+
+                const player = gameState.players[playerId];
+                if (!player || player.health <= 0) continue;
+
+                if (player.targetX !== undefined && player.targetY !== undefined) {
+                    player.x += (player.targetX - player.x) * INTERPOLATION_SPEED;
+                    player.y += (player.targetY - player.y) * INTERPOLATION_SPEED;
+                }
+            }
+
+            // Render
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            drawGrid();
+            
+            // Draw players
+            for (const playerId in gameState.players) {
+                const player = gameState.players[playerId];
+                if (player && player.health > 0) {
+                    drawPlayer(player);
+                }
+            }
+
+            drawHitEffects();
+            drawCrosshair();
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
         
         // Game functions
         function initOfflineMode() {
@@ -599,231 +818,6 @@
             gameState.players['offline-player'] = gameState.myPlayer;
             updateHUD();
             document.getElementById('playerName').textContent = 'Offline Mode';
-        }
-        
-        function connectToServer() {
-            if (forceDisconnected) {
-                console.log('Connection was force disconnected, switching to offline mode');
-                initOfflineMode();
-                return;
-            }
-
-            if (socket && socket.connected) {
-                console.log('Already connected, skipping connection attempt');
-                return;
-            }
-            
-            // Clean up any existing connection
-            cleanup();
-            updateConnectionStatus('connecting');
-            
-            try {
-                console.log('Attempting to connect to server...');
-                // Use secure WebSocket for production, regular for localhost
-                const isSecure = window.location.protocol === 'https:';
-                const serverUrl = window.location.hostname === 'localhost' ? 
-                    'http://localhost:3000' : 
-                    `${isSecure ? 'https' : 'http'}://${window.location.host}`;
-                
-                console.log('Connecting to:', serverUrl);
-                socket = io(serverUrl, { 
-                    timeout: 5000,
-                    transports: ['websocket'],
-                    reconnection: false,
-                    auth: {
-                        clientTime: Date.now()
-                    },
-                    multiplex: false,
-                    query: {
-                        clientId: Math.random().toString(36).substring(7)
-                    }
-                });
-                
-                // Set connection timeout
-                connectionTimeout = setTimeout(() => {
-                    if (socket && !socket.connected) {
-                        console.log('Connection timeout, cleaning up');
-                        cleanup();
-                        updateConnectionStatus('disconnected');
-                        tryReconnectOrOffline();
-                    }
-                }, 5000);
-                
-                socket.on('connect', () => {
-                    console.log('Connected to server with ID:', socket.id);
-                    clearTimeout(connectionTimeout);
-                    updateConnectionStatus('connected');
-                    gameState.myId = socket.id;
-                    reconnectAttempts = 0;
-                    forceDisconnected = false;
-                    
-                    // Start sending periodic pings to keep the connection alive
-                    pingInterval = setInterval(() => {
-                        if (socket && socket.connected) {
-                            socket.emit('ping');
-                        }
-                    }, 2000);
-                });
-
-                // Add error event handler
-                socket.on('error', (error) => {
-                    console.error('Socket error:', error);
-                });
-
-                // Add connect_error event handler
-                socket.on('connect_error', (error) => {
-                    console.error('Connection error:', error);
-                });
-                
-                // Game events
-                socket.on('gameState', (state) => {
-                    if (state && typeof state === 'object') {
-                        console.log('Received initial game state:', state);
-                        console.log('Number of players in state:', Object.keys(state.players || {}).length);
-                        
-                        // Clear existing state first
-                        gameState.players = {};
-                        gameState.bullets = [];
-                        
-                        // Update with new state
-                        if (state.players) {
-                    gameState.players = state.players;
-                            gameState.myPlayer = state.players[socket.id];
-                            console.log('Current socket ID:', socket.id);
-                            console.log('Players in game:', Object.keys(gameState.players).length);
-                            console.log('My player data:', gameState.myPlayer);
-                        }
-                        
-                        if (Array.isArray(state.bullets)) {
-                            gameState.bullets = state.bullets;
-                        }
-                        
-                        gameState.playerCount = state.playerCount || 0;
-                        
-                        if (gameState.myPlayer) {
-                            console.log('Successfully initialized my player:', gameState.myPlayer);
-                            if (!gameLoopStarted) {
-                                console.log('Starting game loop...');
-                                gameLoopStarted = true;
-                                gameLoop();
-                            }
-                        } else {
-                            console.warn('Warning: My player not found in game state. Socket ID:', socket.id);
-                            console.warn('Available player IDs:', Object.keys(state.players || {}));
-                        }
-                        updateHUD();
-                    } else {
-                        console.error('Received invalid game state:', state);
-                    }
-                });
-                
-                socket.on('playerCountUpdate', (count) => {
-                    gameState.playerCount = count;
-                    updateHUD();
-                });
-                
-                socket.on('playerJoined', (player) => {
-                    console.log('Player joined event received:', player);
-                    if (!gameState.players[player.id]) {
-                        gameState.players[player.id] = initializePlayerState(player);
-                        if (player.id === socket.id) {
-                            gameState.myPlayer = gameState.players[player.id];
-                            gameState.myId = player.id;
-                            if (!gameLoopStarted) {
-                                console.log('Starting game loop after player join...');
-                                gameLoopStarted = true;
-                                gameLoop();
-                            }
-                        }
-                        updateHUD();
-                    }
-                });
-                
-                socket.on('playerLeft', (playerId) => {
-                    console.log('Player left:', playerId);
-                    const player = gameState.players[playerId];
-                    if (player) {
-                        delete gameState.players[playerId];
-                        updateHUD();
-                    }
-                });
-                
-                socket.on('playerUpdate', (player) => {
-                    if (player && player.id) {
-                        if (player.id === socket.id) {
-                            // For own player, only update if server position is too different
-                            const dx = player.x - gameState.myPlayer.x;
-                            const dy = player.y - gameState.myPlayer.y;
-                            const distance = Math.sqrt(dx * dx + dy * dy);
-                            
-                            if (distance > PREDICTION_THRESHOLD) {
-                                gameState.myPlayer.x = player.x;
-                                gameState.myPlayer.y = player.y;
-                            }
-                        } else {
-                            // For other players, set target position for interpolation
-                            if (!gameState.players[player.id]) {
-                                gameState.players[player.id] = player;
-                            } else {
-                                gameState.players[player.id].targetX = player.x;
-                                gameState.players[player.id].targetY = player.y;
-                                gameState.players[player.id].health = player.health;
-                            }
-                        }
-                        updateHUD();
-                    }
-                });
-                
-                socket.on('bulletFired', (bullet) => {
-                    gameState.bullets.push(bullet);
-                    createMuzzleFlash(bullet.startX, bullet.startY);
-                });
-                
-                socket.on('bulletRemoved', (bulletId) => {
-                    gameState.bullets = gameState.bullets.filter(b => b.id !== bulletId);
-                });
-                
-                socket.on('playerHit', (data) => {
-                    createHitEffect(data.x, data.y);
-                    // Update the player's health in the game state
-                    if (data.playerId && gameState.players[data.playerId]) {
-                        gameState.players[data.playerId].health = data.health;
-                        if (data.playerId === gameState.myId) {
-                            gameState.myPlayer.health = data.health;
-                            updateHUD();
-                        }
-                    }
-                });
-                
-                socket.on('playerKilled', (data) => {
-                    const { killer, victim } = data;
-                    addToKillFeed(`${killer.name} eliminated ${victim.name}`);
-                    
-                    if (victim.id === gameState.myId) {
-                        showRespawnScreen(killer.name);
-                        stats.deaths++;
-                        updateStats();
-                    }
-                    
-                    if (killer.id === gameState.myId) {
-                        stats.kills++;
-                        updateStats();
-                    }
-                });
-                
-                socket.on('playerRespawned', (player) => {
-                    gameState.players[player.id] = player;
-                    if (player.id === gameState.myId) {
-                        gameState.myPlayer = player;
-                        hideRespawnScreen();
-                        updateHUD();
-                    }
-                });
-                
-            } catch (error) {
-                console.error('Connection failed:', error);
-                handleDisconnect();
-            }
         }
         
         function updateConnectionStatus(status) {
@@ -1030,7 +1024,7 @@
             if (!forceDisconnected && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                 console.log(`Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
                 setTimeout(connectToServer, 2000);
-                    } else {
+            } else {
                 console.log('Switching to offline mode');
                 if (!gameState.myPlayer) {
                     initOfflineMode();
@@ -1294,134 +1288,8 @@
             ctx.fill();
         }
         
-        // Optimized game loop
-        let animationFrameId = null;
-        
-        function gameLoop(timestamp) {
-            if (!gameState.myPlayer) {
-                animationFrameId = requestAnimationFrame(gameLoop);
-                return;
-            }
-
-            // Calculate delta time
-            const deltaTime = timestamp - lastFrameTime;
-            lastFrameTime = timestamp;
-            
-            // Skip frame if too much time has passed
-            if (deltaTime > 100) {
-                animationFrameId = requestAnimationFrame(gameLoop);
-                return;
-            }
-
-            // Handle movement with improved prediction
-            const speed = 5 * (deltaTime / 16); // Scale speed with delta time
-            let dx = 0;
-            let dy = 0;
-            
-            if (keys['w'] || keys['arrowup']) dy -= speed;
-            if (keys['s'] || keys['arrowdown']) dy += speed;
-            if (keys['a'] || keys['arrowleft']) {
-                dx -= speed;
-                playerDirection = 1;
-            }
-            if (keys['d'] || keys['arrowright']) {
-                dx += speed;
-                playerDirection = -1;
-            }
-            
-            if (dx !== 0 || dy !== 0) {
-                // Normalize diagonal movement
-                if (dx !== 0 && dy !== 0) {
-                    const normalizer = 1 / Math.sqrt(2);
-                    dx *= normalizer;
-                    dy *= normalizer;
-                }
-                
-                const newX = Math.max(PLAYER_SIZE/2, Math.min(canvas.width - PLAYER_SIZE/2, gameState.myPlayer.x + dx));
-                const newY = Math.max(PLAYER_SIZE/2, Math.min(canvas.height - PLAYER_SIZE/2, gameState.myPlayer.y + dy));
-                
-                // Update local position immediately for responsiveness
-                gameState.myPlayer.x = newX;
-                gameState.myPlayer.y = newY;
-
-                // Send updates to server at controlled rate
-                const now = Date.now();
-                if (now - lastMovementUpdate >= MOVEMENT_UPDATE_RATE) {
-                    if (socket && socket.connected) {
-                        const update = { 
-                            x: newX, 
-                            y: newY,
-                            timestamp: now
-                        };
-                        
-                        socket.emit('move', update);
-                        pendingUpdates.set(now, update);
-                        
-                        // Clean up old pending updates
-                        for (const [timestamp, _] of pendingUpdates) {
-                            if (now - timestamp > 1000) {
-                                pendingUpdates.delete(timestamp);
-                            }
-                        }
-                    }
-                    lastMovementUpdate = now;
-                }
-            }
-
-            // Interpolate other players' positions
-            for (const playerId in gameState.players) {
-                if (playerId === gameState.myId) continue;
-                
-                const player = gameState.players[playerId];
-                if (!player || player.health <= 0) continue;
-
-                // If player has target position, interpolate towards it
-                if (player.targetX !== undefined && player.targetY !== undefined) {
-                    player.x += (player.targetX - player.x) * INTERPOLATION_SPEED;
-                    player.y += (player.targetY - player.y) * INTERPOLATION_SPEED;
-                }
-            }
-            
-            // Apply server correction if needed
-            if (lastServerPosition) {
-                const dx = lastServerPosition.x - gameState.myPlayer.x;
-                const dy = lastServerPosition.y - gameState.myPlayer.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                if (distance > 5) {
-                    gameState.myPlayer.x += dx * INTERPOLATION_SPEED;
-                    gameState.myPlayer.y += dy * INTERPOLATION_SPEED;
-                } else {
-                    lastServerPosition = null;
-                }
-            }
-            
-            // Clear canvas and render
-            ctx.fillStyle = '#0a0a0a';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            drawGrid();
-            
-            // Draw players
-            for (const playerId in gameState.players) {
-                const player = gameState.players[playerId];
-                if (player && player.health > 0) {
-                    drawPlayer(player);
-                }
-            }
-            
-            // Draw effects
-            drawHitEffects();
-            
-            // Draw crosshair
-            drawCrosshair();
-            
-            // Request next frame
-            animationFrameId = requestAnimationFrame(gameLoop);
-        }
-        
         // Start game
-                connectToServer();
+        connectToServer();
     </script>
 </body>
 </html>
