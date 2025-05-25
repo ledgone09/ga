@@ -394,6 +394,105 @@
             z-index: 15;
             opacity: 0.8;
         }
+
+        .username-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(20px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+        }
+
+        .username-modal {
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid rgba(0, 212, 255, 0.3);
+            border-radius: 20px;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            box-shadow: 
+                0 20px 40px rgba(0, 0, 0, 0.5),
+                0 0 0 1px rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .username-title {
+            font-size: 28px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #00d4ff, #7c3aed, #ff6b6b);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-align: center;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+        }
+
+        .username-input {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(0, 212, 255, 0.3);
+            border-radius: 12px;
+            padding: 16px 20px;
+            font-size: 18px;
+            font-family: 'Orbitron', monospace;
+            color: white;
+            text-align: center;
+            width: 300px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .username-input:focus {
+            border-color: #00d4ff;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .username-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .username-info {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: 400;
+        }
+
+        .username-button {
+            background: linear-gradient(135deg, #00d4ff, #7c3aed);
+            border: none;
+            padding: 16px 32px;
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Orbitron', monospace;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+            min-width: 200px;
+        }
+
+        .username-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 212, 255, 0.5);
+        }
+
+        .username-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
     </style>
 </head>
 <body>
@@ -447,6 +546,16 @@
                 <div class="death-message">Eliminated</div>
                 <div class="killer-info">Killed by: <span id="killerName">Unknown</span></div>
                 <button class="respawn-button" onclick="requestRespawn()">Respawn</button>
+            </div>
+            
+            <!-- Username Input Modal -->
+            <div class="username-overlay" id="usernameOverlay">
+                <div class="username-modal">
+                    <div class="username-title">⚔ Enter Your Battle Name</div>
+                    <input type="text" id="usernameInput" class="username-input" placeholder="Enter your name..." maxlength="15" autocomplete="off">
+                    <div class="username-info">Maximum 15 characters</div>
+                    <button class="username-button" onclick="submitUsername()">Join Battle</button>
+                </div>
             </div>
         </div>
         
@@ -584,7 +693,56 @@
             deaths: 0,
             kdr: 0.00
         };
-        
+
+        // Username management
+        let playerUsername = '';
+        let usernameSubmitted = false;
+
+        // Show username modal on game start
+        function showUsernameModal() {
+            document.getElementById('usernameOverlay').style.display = 'flex';
+            document.getElementById('usernameInput').focus();
+        }
+
+        function hideUsernameModal() {
+            document.getElementById('usernameOverlay').style.display = 'none';
+        }
+
+        function submitUsername() {
+            const input = document.getElementById('usernameInput');
+            const username = input.value.trim();
+            
+            if (username.length === 0) {
+                input.style.borderColor = '#ef4444';
+                input.placeholder = 'Please enter a name!';
+                return;
+            }
+            
+            if (username.length > 15) {
+                input.style.borderColor = '#ef4444';
+                input.value = username.substring(0, 15);
+                return;
+            }
+            
+            playerUsername = username;
+            usernameSubmitted = true;
+            hideUsernameModal();
+            
+            // Now connect to server with username
+            console.log('Username submitted:', playerUsername);
+            connectToServer();
+        }
+
+        // Handle Enter key in username input
+        document.addEventListener('DOMContentLoaded', () => {
+            const usernameInput = document.getElementById('usernameInput');
+            usernameInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    submitUsername();
+                }
+            });
+        });
+
         // Game functions
         function connectToServer() {
             console.log('Attempting to connect to server...');
@@ -604,6 +762,11 @@
                     console.log('🌐 Transport:', socket.io.engine.transport.name);
                     updateConnectionStatus('connected');
                     gameState.myId = socket.id;
+                    
+                    // Send username to server
+                    if (playerUsername) {
+                        socket.emit('setUsername', playerUsername);
+                    }
                 });
                 
                 socket.on('disconnect', (reason) => {
@@ -923,7 +1086,7 @@
                 health: 100,
                 maxHealth: 100,
                 color: '#00d4ff',
-                name: 'You (Offline)',
+                name: playerUsername || 'You (Offline)',
                 angle: 0,
                 direction: 1,
                 kills: 0
@@ -932,7 +1095,7 @@
             gameState.playerCount = 1;
             
             updateHUD();
-            document.getElementById('playerName').textContent = 'Offline Mode';
+            document.getElementById('playerName').textContent = playerUsername || 'Offline Mode';
             
             // Start game loop if not already started
             if (!gameLoopStarted) {
@@ -968,22 +1131,39 @@
             setTimeout(() => { canShoot = true; }, ATTACK_COOLDOWN);
             
             const player = gameState.myPlayer;
-            const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
             
-            if (socket && socket.connected) {
-                socket.emit('attack', { angle: angle });
+            // Instead of using precise mouse angle, use area-based attack
+            // Attack in the direction the player is facing (left/right)
+            let attackDirection = player.direction || 1; // Default to left if no direction
+            
+            // If mouse is on opposite side of player, attack in that direction
+            if (mouse.x > player.x && attackDirection === 1) {
+                attackDirection = -1; // Attack right
+            } else if (mouse.x < player.x && attackDirection === -1) {
+                attackDirection = 1; // Attack left
             }
             
-            // Start attack animation
+            // Calculate attack angle based on direction (wide sweep)
+            const baseAngle = attackDirection === 1 ? Math.PI : 0; // Left = π, Right = 0
+            
+            if (socket && socket.connected) {
+                // Send area attack instead of precise angle
+                socket.emit('areaAttack', { 
+                    direction: attackDirection,
+                    baseAngle: baseAngle
+                });
+            }
+            
+            // Start attack animation with the base angle for visual feedback
             isAttacking = true;
             attackStartTime = Date.now();
-            attackAngle = angle;
+            attackAngle = baseAngle;
             
             // Broadcast attack animation to other players
             if (socket && socket.connected) {
                 socket.emit('attackAnimation', {
                     playerId: gameState.myId,
-                    angle: angle,
+                    angle: baseAngle,
                     timestamp: Date.now()
                 });
             }
@@ -1484,22 +1664,20 @@
         
         // Start the game when the page loads
         window.addEventListener('load', () => {
-            console.log('🚀 Page loaded, connecting to server...');
-            console.log('🌍 Environment:', isProduction ? 'production' : 'development');
-            console.log('🔗 Server URL:', serverUrl);
+            console.log('🚀 Page loaded, showing username modal...');
+            showUsernameModal();
             
-            // Try to connect to server
-            connectToServer();
+            // Don't automatically connect anymore - wait for username submission
             
-            // Fallback: if no connection after 8 seconds, start offline mode
+            // Fallback: if no connection after username is submitted and 8 seconds pass, start offline mode
             setTimeout(() => {
-                if (!socket || !socket.connected) {
+                if (usernameSubmitted && (!socket || !socket.connected)) {
                     console.log('⚠️ No server connection, starting offline mode as fallback');
                     if (!gameState.myPlayer) {
                         initOfflineMode();
                     }
                 }
-            }, 8000);
+            }, 10000); // Increased timeout to account for username input time
         });
         
         // Input event listeners
@@ -1541,6 +1719,10 @@
         canvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
         });
+
+        // Global functions for HTML onclick handlers
+        window.submitUsername = submitUsername;
+        window.requestRespawn = requestRespawn;
     </script>
 </body>
 </html>

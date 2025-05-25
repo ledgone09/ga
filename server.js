@@ -127,6 +127,30 @@ io.on('connection', (socket) => {
     });
     io.emit('playerCountUpdate', gameState.playerCount);
 
+    // Handle username setting
+    socket.on('setUsername', (username) => {
+        const player = gameState.players.get(socket.id);
+        if (player && username && username.trim().length > 0) {
+            // Validate and sanitize username
+            const cleanUsername = username.trim().substring(0, 15);
+            player.name = cleanUsername;
+            console.log(`Player ${socket.id} set username to: ${cleanUsername}`);
+            
+            // Broadcast updated player info
+            io.emit('playerUpdate', {
+                id: player.id,
+                x: player.x,
+                y: player.y,
+                health: player.health,
+                maxHealth: player.maxHealth,
+                color: player.color,
+                name: player.name,
+                direction: player.direction,
+                weaponAngle: player.weaponAngle || 0
+            });
+        }
+    });
+
     // Handle movement
     socket.on('move', (data) => {
         const player = gameState.players.get(socket.id);
@@ -203,6 +227,70 @@ io.on('connection', (socket) => {
                     
                     if (angleDiff <= MELEE_ANGLE / 2) {
                         player.health -= MELEE_DAMAGE;
+                        io.emit('playerHit', { 
+                            x: player.x, 
+                            y: player.y,
+                            playerId: playerId,
+                            health: player.health
+                        });
+
+                        if (player.health <= 0) {
+                            attacker.kills++;
+                            io.emit('playerKilled', {
+                                killer: attacker,
+                                victim: player
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Handle area-based attack (much easier to hit)
+    socket.on('areaAttack', (data) => {
+        const attacker = gameState.players.get(socket.id);
+        if (attacker && attacker.health > 0) {
+            attacker.lastActivity = Date.now();
+            
+            for (const [playerId, player] of gameState.players.entries()) {
+                if (player.health <= 0 || playerId === socket.id) continue;
+
+                const dx = player.x - attacker.x;
+                const dy = player.y - attacker.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Extended range for easier hitting
+                const attackRange = MELEE_RANGE + 30; // Increased range
+                
+                if (distance <= attackRange) {
+                    // Check if player is roughly in the attack direction
+                    const isAttackingLeft = data.direction === 1;
+                    const isAttackingRight = data.direction === -1;
+                    
+                    let isInAttackZone = false;
+                    
+                    if (isAttackingLeft && dx <= 0) {
+                        // Attacking left and enemy is to the left
+                        isInAttackZone = true;
+                    } else if (isAttackingRight && dx >= 0) {
+                        // Attacking right and enemy is to the right
+                        isInAttackZone = true;
+                    }
+                    
+                    // Also consider vertical range (don't need to be at exact same height)
+                    const verticalRange = 80; // Allow hitting enemies up to 80 pixels above/below
+                    if (isInAttackZone && Math.abs(dy) <= verticalRange) {
+                        player.health -= MELEE_DAMAGE;
+                        
+                        console.log('Area attack hit:', { 
+                            attacker: socket.id, 
+                            target: playerId, 
+                            distance,
+                            attackDirection: data.direction,
+                            dx, dy
+                        });
+                        
                         io.emit('playerHit', { 
                             x: player.x, 
                             y: player.y,
