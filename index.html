@@ -215,6 +215,88 @@
             width: 100%;
             box-sizing: border-box;
         }
+
+        /* Contract section inside HUD - desktop only */
+        .hud-contract-section {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px 16px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-width: 300px;
+            max-width: 350px;
+        }
+
+        .hud-contract-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #ff6b00;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .hud-contract-address-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 8px;
+            padding: 8px;
+            border: 1px solid rgba(255, 107, 0, 0.2);
+            width: 100%;
+        }
+
+        .hud-contract-address {
+            flex: 1;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #ffd700;
+            background: transparent;
+            border: none;
+            outline: none;
+            word-break: break-all;
+            text-align: left;
+            padding: 4px;
+            user-select: all;
+            cursor: text;
+        }
+
+        .hud-copy-button {
+            background: linear-gradient(135deg, #ff6b00, #ffd700);
+            border: none;
+            padding: 6px 10px;
+            border-radius: 6px;
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            font-family: 'Orbitron', monospace;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(255, 107, 0, 0.3);
+        }
+
+        .hud-copy-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 215, 0, 0.5);
+            background: linear-gradient(135deg, #ff4757, #ff6b00);
+        }
+
+        /* Show contract in HUD on desktop only */
+        @media (min-width: 769px) {
+            .hud-contract-section {
+                display: flex;
+            }
+            
+            /* Hide the bottom contract section on desktop */
+            .contract-section {
+                display: none;
+            }
+        }
         
         .health-panel {
             background: rgba(0, 0, 0, 0.8);
@@ -1297,6 +1379,15 @@
                 </div>
             </div>
             
+            <!-- Contract Address in HUD (desktop only) -->
+            <div class="hud-contract-section">
+                <div class="hud-contract-title">📄 Contract Address</div>
+                <div class="hud-contract-address-container">
+                    <div class="hud-contract-address" id="hudContractAddress">Coming soon</div>
+                    <button class="hud-copy-button" id="hudCopyButton" onclick="copyHudContractAddress()">📋 Copy</button>
+                </div>
+            </div>
+            
             <div class="stats-panel">
                 <div class="stat-row">
                     <span class="stat-label">Player</span>
@@ -1318,7 +1409,7 @@
         </div>
         
         <div class="game-arena">
-            <canvas id="gameCanvas" width="1200" height="800"></canvas>
+            <canvas id="gameCanvas" width="1200" height="900"></canvas>
             
             <div class="hud-overlay">
                 <!-- Mobile Controls overlaying the game canvas -->
@@ -1410,9 +1501,9 @@
 
         // World and Camera settings
         const CANVAS_WIDTH = 1200;
-        const CANVAS_HEIGHT = 800;
+        const CANVAS_HEIGHT = 900; // Increased from 800 to 900
         const WORLD_WIDTH = CANVAS_WIDTH * 4; // 4800
-        const WORLD_HEIGHT = CANVAS_HEIGHT * 4; // 3200
+        const WORLD_HEIGHT = CANVAS_HEIGHT * 4; // 3600
         
         // Camera system
         let camera = {
@@ -2693,6 +2784,7 @@
         window.submitUsername = submitUsername;
         window.requestRespawn = requestRespawn;
         window.copyContractAddress = copyContractAddress;
+        window.copyHudContractAddress = copyHudContractAddress;
 
         // Contract address copy function
         function copyContractAddress() {
@@ -2714,6 +2806,95 @@
                 fallbackCopy(contractAddress, copyButton, copyFeedback);
             }
         }
+
+        // HUD Contract address copy function
+        function copyHudContractAddress() {
+            const contractAddress = document.getElementById('hudContractAddress').textContent;
+            const copyButton = document.getElementById('hudCopyButton');
+            
+            // Try to copy to clipboard
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                // Modern clipboard API
+                navigator.clipboard.writeText(contractAddress).then(() => {
+                    showHudCopySuccess(copyButton);
+                }).catch(() => {
+                    // Fallback if clipboard API fails
+                    fallbackHudCopy(contractAddress, copyButton);
+                });
+            } else {
+                // Fallback for older browsers or mobile
+                fallbackHudCopy(contractAddress, copyButton);
+            }
+        }
+
+        function fallbackHudCopy(text, button) {
+            // Create a temporary textarea element
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            
+            // Select and copy the text
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showHudCopySuccess(button);
+                } else {
+                    showHudCopyError(button);
+                }
+            } catch (err) {
+                showHudCopyError(button);
+            }
+            
+            // Clean up
+            document.body.removeChild(textArea);
+        }
+
+        function showHudCopySuccess(button) {
+            // Update button text temporarily
+            const originalText = button.textContent;
+            button.textContent = '✅ Copied!';
+            button.style.background = 'linear-gradient(135deg, #22c55e, #16a34a)';
+            
+            // Reset after 2 seconds
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.background = 'linear-gradient(135deg, #ff6b00, #ffd700)';
+            }, 2000);
+        }
+
+        function showHudCopyError(button) {
+            // Update button text temporarily
+            const originalText = button.textContent;
+            button.textContent = '❌ Failed';
+            button.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+            
+            // Reset after 2 seconds
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.background = 'linear-gradient(135deg, #ff6b00, #ffd700)';
+            }, 2000);
+        }
+
+        // Sync contract addresses between HUD and bottom section
+        function updateContractAddresses(address) {
+            const contractAddress = document.getElementById('contractAddress');
+            const hudContractAddress = document.getElementById('hudContractAddress');
+            
+            if (contractAddress) contractAddress.textContent = address;
+            if (hudContractAddress) hudContractAddress.textContent = address;
+        }
+
+        // Initialize contract addresses on load
+        document.addEventListener('DOMContentLoaded', () => {
+            // You can update this when you have the actual contract address
+            // updateContractAddresses('0x1234567890abcdef...');
+        });
 
         function fallbackCopy(text, button, feedback) {
             // Create a temporary textarea element
