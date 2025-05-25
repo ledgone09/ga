@@ -173,9 +173,9 @@
         
         @media (max-width: 768px) {
             .game-arena {
-                border-radius: 6px;
+                border-radius: 0;
                 box-shadow: none;
-                border: 1px solid rgba(255, 107, 0, 0.3);
+                border: none;
             }
         }
         
@@ -627,7 +627,7 @@
         /* Mobile Responsiveness */
                     @media (max-width: 768px) {
             body {
-                padding: 2px;
+                padding: 0;
                 margin: 0;
                 min-height: 100vh;
                 min-height: 100dvh;
@@ -636,7 +636,7 @@
             }
 
             .game-interface {
-                padding: 3px;
+                padding: 0;
                 width: 100%;
                 max-width: 100vw;
                 box-sizing: border-box;
@@ -644,14 +644,17 @@
                 flex-direction: column;
                 height: auto;
                 min-height: 100vh;
-                border-radius: 6px;
+                border-radius: 0;
                 justify-content: flex-start;
             }
 
             .game-header {
-                margin-bottom: 2px;
-                padding: 0 2px;
+                margin: 0;
+                padding: 5px;
                 flex-shrink: 0;
+                height: 50px;
+                display: flex;
+                align-items: center;
             }
 
             .game-title {
@@ -660,10 +663,7 @@
             }
 
             .leaderboard {
-                padding: 4px;
-                margin-bottom: 2px;
-                border-radius: 6px;
-                flex-shrink: 0;
+                display: none;
             }
 
             .leaderboard-title {
@@ -688,6 +688,7 @@
                 display: flex;
                 flex-direction: column;
                 position: relative;
+                margin: 0;
             }
 
             .game-title {
@@ -707,28 +708,32 @@
 
             #gameCanvas {
                 width: 100% !important;
-                height: 45vh !important;
+                height: 50vh !important;
                 max-width: 100vw;
                 object-fit: contain;
-                border-radius: 4px;
+                border-radius: 0;
             }
 
             .player-hud {
                 position: static;
                 flex-direction: row;
-                gap: 5px;
+                gap: 8px;
                 margin: 0;
-                padding: 0;
+                padding: 8px;
                 flex-shrink: 0;
+                background: rgba(0, 0, 0, 0.9);
+                height: 60px;
+                display: flex;
+                align-items: center;
             }
 
             .health-panel,
             .stats-panel {
                 min-width: auto;
                 width: 50%;
-                padding: 4px 6px;
-                border-radius: 4px;
-                font-size: 10px;
+                padding: 2px 4px;
+                border-radius: 3px;
+                font-size: 9px;
             }
 
             .health-label {
@@ -895,21 +900,21 @@
                 justify-content: space-between;
                 align-items: center;
                 pointer-events: auto;
-                position: absolute;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                padding: 6px 8px;
+                position: static;
+                padding: 12px 20px;
                 margin: 0;
                 background: rgba(0, 0, 0, 0.9);
                 border-top: 1px solid rgba(255, 107, 0, 0.3);
-                border-radius: 0 0 6px 6px;
+                border-radius: 0;
+                height: 90px;
+                width: 100%;
+                box-sizing: border-box;
             }
         }
 
         .mobile-joystick {
-            width: 140px;
-            height: 140px;
+            width: 70px;
+            height: 70px;
             background: rgba(255, 107, 0, 0.25);
             border: 3px solid rgba(255, 107, 0, 0.5);
             border-radius: 50%;
@@ -917,44 +922,47 @@
             touch-action: none;
             user-select: none;
             box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+            flex-shrink: 0;
         }
 
         .mobile-joystick-knob {
-            width: 60px;
-            height: 60px;
+            width: 30px;
+            height: 30px;
             background: linear-gradient(135deg, #ff6b00, #ffd700);
-            border: 3px solid rgba(255, 255, 255, 0.4);
+            border: 2px solid rgba(255, 255, 255, 0.4);
             border-radius: 50%;
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             transition: all 0.1s ease;
-            box-shadow: 0 6px 15px rgba(255, 107, 0, 0.5);
+            box-shadow: 0 4px 10px rgba(255, 107, 0, 0.5);
         }
 
         .mobile-buttons {
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             gap: 15px;
+            align-items: center;
         }
 
         .mobile-button {
-            width: 80px;
-            height: 80px;
+            width: 60px;
+            height: 60px;
             background: linear-gradient(135deg, #ff6b00, #ffd700);
             border: 3px solid rgba(255, 255, 255, 0.4);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 28px;
+            font-size: 20px;
             color: white;
             text-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
             touch-action: manipulation;
             user-select: none;
             box-shadow: 0 6px 15px rgba(255, 107, 0, 0.5);
             transition: all 0.1s ease;
+            flex-shrink: 0;
         }
 
         .mobile-button:active {
@@ -1117,15 +1125,7 @@
                 </div>
             </div>
             
-            <!-- Mobile Controls inside game arena at bottom -->
-            <div class="mobile-controls">
-                <div class="mobile-joystick" id="mobileJoystick">
-                    <div class="mobile-joystick-knob" id="mobileJoystickKnob"></div>
-                </div>
-                <div class="mobile-buttons">
-                    <div class="mobile-button" id="mobileAttackButton">⚔️</div>
-                </div>
-            </div>
+
             
             <div class="respawn-overlay" id="respawnOverlay">
                 <div class="death-icon">💀</div>
@@ -1145,9 +1145,17 @@
                     <button class="username-button" onclick="submitUsername()">JOIN THE BONK</button>
                 </div>
             </div>
+                </div>
+
+        <!-- Mobile Controls moved outside game arena -->
+        <div class="mobile-controls">
+            <div class="mobile-joystick" id="mobileJoystick">
+                <div class="mobile-joystick-knob" id="mobileJoystickKnob"></div>
+            </div>
+            <div class="mobile-buttons">
+                <div class="mobile-button" id="mobileAttackButton">⚔️</div>
+            </div>
         </div>
-
-
         
         <div class="controls-info">
             <div class="control-group">
