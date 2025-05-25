@@ -296,6 +296,11 @@
             .contract-section {
                 display: none;
             }
+            
+            /* Hide the external leaderboard on desktop */
+            .leaderboard {
+                display: none;
+            }
         }
         
         .health-panel {
@@ -398,6 +403,109 @@
             flex-direction: column;
             gap: 8px;
             z-index: 20;
+        }
+
+        /* In-game leaderboard overlay */
+        .ingame-leaderboard {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 280px;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(15px);
+            border-radius: 12px;
+            border: 2px solid rgba(255, 107, 0, 0.3);
+            padding: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            z-index: 20;
+            display: none;
+        }
+
+        .ingame-leaderboard-title {
+            font-size: 16px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #ff6b00, #ffd700, #ff4757);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-align: center;
+            margin-bottom: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            text-shadow: 0 0 8px rgba(255, 107, 0, 0.5);
+        }
+
+        .ingame-leaderboard-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .ingame-leaderboard-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            border-left: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .ingame-leaderboard-item.first {
+            border-left-color: #ffd700;
+            background: rgba(255, 215, 0, 0.1);
+        }
+
+        .ingame-leaderboard-item.second {
+            border-left-color: #c0c0c0;
+            background: rgba(192, 192, 192, 0.1);
+        }
+
+        .ingame-leaderboard-item.third {
+            border-left-color: #cd7f32;
+            background: rgba(205, 127, 50, 0.1);
+        }
+
+        .ingame-leaderboard-rank {
+            font-size: 14px;
+            font-weight: 900;
+            width: 20px;
+            text-align: center;
+        }
+
+        .ingame-leaderboard-rank.first { color: #ffd700; }
+        .ingame-leaderboard-rank.second { color: #c0c0c0; }
+        .ingame-leaderboard-rank.third { color: #cd7f32; }
+
+        .ingame-leaderboard-player {
+            flex: 1;
+            margin-left: 10px;
+        }
+
+        .ingame-leaderboard-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 2px;
+        }
+
+        .ingame-leaderboard-stats {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .ingame-leaderboard-kills {
+            font-size: 14px;
+            font-weight: 900;
+            color: #ff6b00;
+        }
+
+        /* Show in-game leaderboard on desktop only */
+        @media (min-width: 769px) {
+            .ingame-leaderboard {
+                display: block;
+            }
         }
         
         .kill-message {
@@ -1412,6 +1520,21 @@
             <canvas id="gameCanvas" width="1200" height="900"></canvas>
             
             <div class="hud-overlay">
+                <!-- In-game Leaderboard (desktop only) -->
+                <div class="ingame-leaderboard" id="ingameLeaderboard">
+                    <div class="ingame-leaderboard-title">🏆 TOP BONKERS</div>
+                    <div class="ingame-leaderboard-list" id="ingameLeaderboardList">
+                        <div class="ingame-leaderboard-item">
+                            <div class="ingame-leaderboard-rank">-</div>
+                            <div class="ingame-leaderboard-player">
+                                <div class="ingame-leaderboard-name">No BONKERS yet</div>
+                                <div class="ingame-leaderboard-stats">Waiting for BONK warriors...</div>
+                            </div>
+                            <div class="ingame-leaderboard-kills">0</div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Mobile Controls overlaying the game canvas -->
                 <div class="mobile-controls">
                     <div class="mobile-joystick" id="mobileJoystick">
@@ -2978,47 +3101,95 @@
 
         function updateLeaderboardDisplay() {
             const leaderboardList = document.getElementById('leaderboardList');
-            leaderboardList.innerHTML = '';
+            const ingameLeaderboardList = document.getElementById('ingameLeaderboardList');
             
-            if (leaderboardData.length === 0) {
-                leaderboardList.innerHTML = `
-                    <div class="leaderboard-item">
-                        <div class="leaderboard-rank">-</div>
-                        <div class="leaderboard-player">
-                            <div class="leaderboard-name">No BONKERS yet</div>
-                            <div class="leaderboard-stats">Waiting for BONK warriors...</div>
+            // Update external leaderboard (mobile)
+            if (leaderboardList) {
+                leaderboardList.innerHTML = '';
+                
+                if (leaderboardData.length === 0) {
+                    leaderboardList.innerHTML = `
+                        <div class="leaderboard-item">
+                            <div class="leaderboard-rank">-</div>
+                            <div class="leaderboard-player">
+                                <div class="leaderboard-name">No BONKERS yet</div>
+                                <div class="leaderboard-stats">Waiting for BONK warriors...</div>
+                            </div>
+                            <div class="leaderboard-kills">0</div>
                         </div>
-                        <div class="leaderboard-kills">0</div>
-                    </div>
-                `;
-                return;
+                    `;
+                } else {
+                    leaderboardData.forEach((player, index) => {
+                        const rank = index + 1;
+                        const rankClass = rank === 1 ? 'first' : rank === 2 ? 'second' : 'third';
+                        const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
+                        const healthPercent = Math.round((player.health / player.maxHealth) * 100);
+                        const isMyPlayer = player.id === gameState.myId;
+                        
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = `leaderboard-item ${rankClass}`;
+                        if (isMyPlayer) {
+                            itemDiv.style.background = 'rgba(255, 107, 0, 0.15)';
+                            itemDiv.style.borderLeftColor = '#ff6b00';
+                        }
+                        
+                        itemDiv.innerHTML = `
+                            <div class="leaderboard-rank ${rankClass}">${rankIcon}</div>
+                            <div class="leaderboard-player">
+                                <div class="leaderboard-name">${player.name}${isMyPlayer ? ' (You)' : ''}</div>
+                                <div class="leaderboard-stats">Health: ${healthPercent}%</div>
+                            </div>
+                            <div class="leaderboard-kills">${player.kills}</div>
+                        `;
+                        
+                        leaderboardList.appendChild(itemDiv);
+                    });
+                }
             }
             
-            leaderboardData.forEach((player, index) => {
-                const rank = index + 1;
-                const rankClass = rank === 1 ? 'first' : rank === 2 ? 'second' : 'third';
-                const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
-                const healthPercent = Math.round((player.health / player.maxHealth) * 100);
-                const isMyPlayer = player.id === gameState.myId;
+            // Update in-game leaderboard (desktop)
+            if (ingameLeaderboardList) {
+                ingameLeaderboardList.innerHTML = '';
                 
-                const itemDiv = document.createElement('div');
-                itemDiv.className = `leaderboard-item ${rankClass}`;
-                if (isMyPlayer) {
-                    itemDiv.style.background = 'rgba(255, 107, 0, 0.15)';
-                    itemDiv.style.borderLeftColor = '#ff6b00';
+                if (leaderboardData.length === 0) {
+                    ingameLeaderboardList.innerHTML = `
+                        <div class="ingame-leaderboard-item">
+                            <div class="ingame-leaderboard-rank">-</div>
+                            <div class="ingame-leaderboard-player">
+                                <div class="ingame-leaderboard-name">No BONKERS yet</div>
+                                <div class="ingame-leaderboard-stats">Waiting for BONK warriors...</div>
+                            </div>
+                            <div class="ingame-leaderboard-kills">0</div>
+                        </div>
+                    `;
+                } else {
+                    leaderboardData.forEach((player, index) => {
+                        const rank = index + 1;
+                        const rankClass = rank === 1 ? 'first' : rank === 2 ? 'second' : 'third';
+                        const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
+                        const healthPercent = Math.round((player.health / player.maxHealth) * 100);
+                        const isMyPlayer = player.id === gameState.myId;
+                        
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = `ingame-leaderboard-item ${rankClass}`;
+                        if (isMyPlayer) {
+                            itemDiv.style.background = 'rgba(255, 107, 0, 0.15)';
+                            itemDiv.style.borderLeftColor = '#ff6b00';
+                        }
+                        
+                        itemDiv.innerHTML = `
+                            <div class="ingame-leaderboard-rank ${rankClass}">${rankIcon}</div>
+                            <div class="ingame-leaderboard-player">
+                                <div class="ingame-leaderboard-name">${player.name}${isMyPlayer ? ' (You)' : ''}</div>
+                                <div class="ingame-leaderboard-stats">Health: ${healthPercent}%</div>
+                            </div>
+                            <div class="ingame-leaderboard-kills">${player.kills}</div>
+                        `;
+                        
+                        ingameLeaderboardList.appendChild(itemDiv);
+                    });
                 }
-                
-                itemDiv.innerHTML = `
-                    <div class="leaderboard-rank ${rankClass}">${rankIcon}</div>
-                    <div class="leaderboard-player">
-                        <div class="leaderboard-name">${player.name}${isMyPlayer ? ' (You)' : ''}</div>
-                        <div class="leaderboard-stats">Health: ${healthPercent}%</div>
-                    </div>
-                    <div class="leaderboard-kills">${player.kills}</div>
-                `;
-                
-                leaderboardList.appendChild(itemDiv);
-            });
+            }
         }
 
         // Mobile detection and responsive canvas
