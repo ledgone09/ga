@@ -1848,7 +1848,7 @@
             const player = gameState.myPlayer;
             
             if (isMobile) {
-                // Mobile: Use much more forgiving area-based attack
+                // Mobile: Use bat collision detection - no cursor needed
                 let attackDirection = player.direction || 1; // Default to left if no direction
                 
                 // On mobile, attack in the direction the player is facing or moving
@@ -1860,11 +1860,19 @@
                 
                 const baseAngle = attackDirection === 1 ? Math.PI : 0; // Left = π, Right = 0
                 
+                // Calculate bat position for collision detection
+                const batReach = BAT_SIZE * 0.8; // How far the bat extends
+                const batX = player.x + Math.cos(baseAngle) * batReach;
+                const batY = player.y + Math.sin(baseAngle) * batReach;
+                
                 if (socket && socket.connected) {
-                    // Send enhanced mobile area attack with larger range
-                    socket.emit('mobileAreaAttack', { 
+                    // Send mobile collision attack with bat position
+                    socket.emit('mobileCollisionAttack', { 
                         direction: attackDirection,
                         baseAngle: baseAngle,
+                        batX: batX,
+                        batY: batY,
+                        batSize: BAT_SIZE,
                         isMobile: true
                     });
                 }
@@ -1873,6 +1881,11 @@
                 isAttacking = true;
                 attackStartTime = Date.now();
                 attackAngle = baseAngle;
+                
+                // Check for local collisions in offline mode
+                if (!socket || !socket.connected) {
+                    checkMobileBatCollisions(batX, batY, BAT_SIZE);
+                }
                 
                 // Broadcast attack animation
                 if (socket && socket.connected) {
@@ -1945,6 +1958,45 @@
         
         function hideRespawnScreen() {
             document.getElementById('respawnOverlay').style.display = 'none';
+        }
+        
+        // Mobile bat collision detection function
+        function checkMobileBatCollisions(batX, batY, batSize) {
+            if (!gameState.myPlayer) return;
+            
+            const batRadius = batSize / 2;
+            const playerRadius = PLAYER_SIZE / 2;
+            
+            // Check collision with all other players
+            for (const playerId in gameState.players) {
+                const otherPlayer = gameState.players[playerId];
+                if (!otherPlayer || playerId === gameState.myId || otherPlayer.health <= 0) continue;
+                
+                // Calculate distance between bat center and player center
+                const dx = batX - otherPlayer.x;
+                const dy = batY - otherPlayer.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Check if bat sprite overlaps with player sprite
+                const collisionDistance = batRadius + playerRadius;
+                
+                if (distance <= collisionDistance) {
+                    console.log('Mobile bat collision detected!', { 
+                        batX, batY, 
+                        playerX: otherPlayer.x, 
+                        playerY: otherPlayer.y, 
+                        distance, 
+                        collisionDistance 
+                    });
+                    
+                    // Create hit effect
+                    createHitEffect(otherPlayer.x, otherPlayer.y);
+                    
+                    // In offline mode, we can't actually damage other players
+                    // This is just for visual feedback
+                    break; // Only hit one player per attack
+                }
+            }
         }
         
         // Visual effects

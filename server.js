@@ -311,6 +311,62 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Handle mobile collision-based attack (most accurate for mobile)
+    socket.on('mobileCollisionAttack', (data) => {
+        const attacker = gameState.players.get(socket.id);
+        if (attacker && attacker.health > 0) {
+            attacker.lastActivity = Date.now();
+            
+            const batRadius = data.batSize / 2;
+            const playerRadius = PLAYER_RADIUS;
+            
+            for (const [playerId, player] of gameState.players.entries()) {
+                if (player.health <= 0 || playerId === socket.id) continue;
+
+                // Calculate distance between bat center and player center
+                const dx = data.batX - player.x;
+                const dy = data.batY - player.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Check if bat sprite overlaps with player sprite
+                const collisionDistance = batRadius + playerRadius + 10; // Add 10px buffer for easier hitting
+                
+                if (distance <= collisionDistance) {
+                    player.health -= MELEE_DAMAGE;
+                    
+                    console.log('Mobile collision attack hit:', { 
+                        attacker: socket.id, 
+                        target: playerId, 
+                        batX: data.batX,
+                        batY: data.batY,
+                        playerX: player.x,
+                        playerY: player.y,
+                        distance,
+                        collisionDistance
+                    });
+                    
+                    io.emit('playerHit', { 
+                        x: player.x, 
+                        y: player.y,
+                        playerId: playerId,
+                        health: player.health
+                    });
+
+                    if (player.health <= 0) {
+                        attacker.kills++;
+                        io.emit('playerKilled', {
+                            killer: attacker,
+                            victim: player
+                        });
+                    }
+                    
+                    // Only hit one player per swing
+                    break;
+                }
+            }
+        }
+    });
+
     // Handle attack animations (broadcast to other players)
     socket.on('attackAnimation', (data) => {
         // Broadcast attack animation to all other players
