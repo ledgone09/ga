@@ -706,6 +706,21 @@
         let attackStartTime = 0;
         let attackAngle = 0;
         let lastWeaponAngle = 0;
+
+        // World and Camera settings
+        const CANVAS_WIDTH = 1200;
+        const CANVAS_HEIGHT = 800;
+        const WORLD_WIDTH = CANVAS_WIDTH * 4; // 4800
+        const WORLD_HEIGHT = CANVAS_HEIGHT * 4; // 3200
+        
+        // Camera system
+        let camera = {
+            x: 0,
+            y: 0,
+            targetX: 0,
+            targetY: 0,
+            smoothing: 0.1
+        };
         
         // Create simple sprite substitutes (colored rectangles)
         const characterSprite = (() => {
@@ -759,7 +774,7 @@
         
         // Input handling
         const keys = {};
-        let mouse = { x: 0, y: 0, clicked: false };
+        let mouse = { x: 0, y: 0, screenX: 0, screenY: 0, clicked: false };
         
         // Movement and networking settings
         const BASE_SPEED = 5;
@@ -1096,9 +1111,9 @@
                 dx *= moveSpeed;
                 dy *= moveSpeed;
 
-                // Calculate new position
-                const newX = Math.max(PLAYER_SIZE/2, Math.min(canvas.width - PLAYER_SIZE/2, gameState.myPlayer.x + dx));
-                const newY = Math.max(PLAYER_SIZE/2, Math.min(canvas.height - PLAYER_SIZE/2, gameState.myPlayer.y + dy));
+                // Calculate new position using world boundaries
+                const newX = Math.max(PLAYER_SIZE/2, Math.min(WORLD_WIDTH - PLAYER_SIZE/2, gameState.myPlayer.x + dx));
+                const newY = Math.max(PLAYER_SIZE/2, Math.min(WORLD_HEIGHT - PLAYER_SIZE/2, gameState.myPlayer.y + dy));
 
                 // Update local position immediately for smooth movement
                 gameState.myPlayer.x = newX;
@@ -1141,6 +1156,28 @@
             // Clear and render
             ctx.fillStyle = '#0a0a0a';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Update camera to follow player
+            if (gameState.myPlayer) {
+                camera.targetX = gameState.myPlayer.x - CANVAS_WIDTH / 2;
+                camera.targetY = gameState.myPlayer.y - CANVAS_HEIGHT / 2;
+                
+                // Smooth camera movement
+                camera.x += (camera.targetX - camera.x) * camera.smoothing;
+                camera.y += (camera.targetY - camera.y) * camera.smoothing;
+                
+                // Keep camera within world bounds
+                camera.x = Math.max(0, Math.min(WORLD_WIDTH - CANVAS_WIDTH, camera.x));
+                camera.y = Math.max(0, Math.min(WORLD_HEIGHT - CANVAS_HEIGHT, camera.y));
+            }
+
+            // Clear and render with camera translation
+            ctx.save();
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Apply camera translation
+            ctx.translate(-camera.x, -camera.y);
 
             drawGrid();
             
@@ -1190,6 +1227,10 @@
             }
 
             drawHitEffects();
+            
+            // Restore camera transformation for UI elements
+            ctx.restore();
+            
             drawCrosshair();
 
             // Update leaderboard periodically
@@ -1204,8 +1245,8 @@
             gameState.myId = 'offline-player';
             gameState.myPlayer = {
                 id: 'offline-player',
-                x: canvas.width / 2,
-                y: canvas.height / 2,
+                x: WORLD_WIDTH / 2,
+                y: WORLD_HEIGHT / 2,
                 health: 100,
                 maxHealth: 100,
                 color: '#00d4ff',
@@ -1730,20 +1771,32 @@
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
             ctx.lineWidth = 1;
             
-            const gridSize = 100; // Increased grid size for better performance
+            const gridSize = 100;
             
-            for (let x = 0; x < canvas.width; x += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, canvas.height);
-                ctx.stroke();
+            // Calculate visible grid boundaries based on camera position
+            const startX = Math.floor(camera.x / gridSize) * gridSize;
+            const endX = startX + CANVAS_WIDTH + gridSize;
+            const startY = Math.floor(camera.y / gridSize) * gridSize;
+            const endY = startY + CANVAS_HEIGHT + gridSize;
+            
+            // Draw vertical lines
+            for (let x = startX; x <= endX; x += gridSize) {
+                if (x >= 0 && x <= WORLD_WIDTH) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, Math.max(0, camera.y));
+                    ctx.lineTo(x, Math.min(WORLD_HEIGHT, camera.y + CANVAS_HEIGHT));
+                    ctx.stroke();
+                }
             }
             
-            for (let y = 0; y < canvas.height; y += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(canvas.width, y);
-                ctx.stroke();
+            // Draw horizontal lines
+            for (let y = startY; y <= endY; y += gridSize) {
+                if (y >= 0 && y <= WORLD_HEIGHT) {
+                    ctx.beginPath();
+                    ctx.moveTo(Math.max(0, camera.x), y);
+                    ctx.lineTo(Math.min(WORLD_WIDTH, camera.x + CANVAS_WIDTH), y);
+                    ctx.stroke();
+                }
             }
         }
         
@@ -1754,21 +1807,21 @@
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2;
             
-            // Draw crosshair lines
+            // Draw crosshair lines using screen coordinates
             ctx.beginPath();
-            ctx.moveTo(mouse.x, mouse.y - gap - size);
-            ctx.lineTo(mouse.x, mouse.y - gap);
-            ctx.moveTo(mouse.x, mouse.y + gap);
-            ctx.lineTo(mouse.x, mouse.y + gap + size);
-            ctx.moveTo(mouse.x - gap - size, mouse.y);
-            ctx.lineTo(mouse.x - gap, mouse.y);
-            ctx.moveTo(mouse.x + gap, mouse.y);
-            ctx.lineTo(mouse.x + gap + size, mouse.y);
+            ctx.moveTo(mouse.screenX, mouse.screenY - gap - size);
+            ctx.lineTo(mouse.screenX, mouse.screenY - gap);
+            ctx.moveTo(mouse.screenX, mouse.screenY + gap);
+            ctx.lineTo(mouse.screenX, mouse.screenY + gap + size);
+            ctx.moveTo(mouse.screenX - gap - size, mouse.screenY);
+            ctx.lineTo(mouse.screenX - gap, mouse.screenY);
+            ctx.moveTo(mouse.screenX + gap, mouse.screenY);
+            ctx.lineTo(mouse.screenX + gap + size, mouse.screenY);
             ctx.stroke();
             
             // Center dot
             ctx.beginPath();
-            ctx.arc(mouse.x, mouse.y, 2, 0, Math.PI * 2);
+            ctx.arc(mouse.screenX, mouse.screenY, 2, 0, Math.PI * 2);
             ctx.fillStyle = '#fff';
             ctx.fill();
         }
@@ -1812,8 +1865,10 @@
         
         canvas.addEventListener('mousemove', (e) => {
             const rect = canvas.getBoundingClientRect();
-            mouse.x = e.clientX - rect.left;
-            mouse.y = e.clientY - rect.top;
+            mouse.screenX = e.clientX - rect.left;
+            mouse.screenY = e.clientY - rect.top;
+            mouse.x = mouse.screenX + camera.x;
+            mouse.y = mouse.screenY + camera.y;
         });
         
         canvas.addEventListener('mousedown', (e) => {

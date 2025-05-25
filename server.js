@@ -48,8 +48,8 @@ const MELEE_RANGE = 100;
 const MELEE_DAMAGE = 25;
 const MELEE_ANGLE = Math.PI / 3;
 const RESPAWN_TIME = 3000;
-const MAP_WIDTH = 1200;
-const MAP_HEIGHT = 800;
+const MAP_WIDTH = 4800;
+const MAP_HEIGHT = 3200;
 const PLAYER_RADIUS = 20;
 
 // Player colors
