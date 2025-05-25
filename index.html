@@ -951,15 +951,18 @@
                 justify-content: space-between;
                 align-items: center;
                 pointer-events: auto;
-                position: static;
-                padding: 5px 20px;
+                position: absolute;
+                bottom: 10px;
+                left: 10px;
+                right: 10px;
+                padding: 5px 15px;
                 margin: 0;
                 background: transparent;
                 border: none;
                 border-radius: 0;
                 height: 80px;
-                width: 100%;
                 box-sizing: border-box;
+                z-index: 20;
             }
         }
 
@@ -1176,10 +1179,17 @@
             <canvas id="gameCanvas" width="1200" height="800"></canvas>
             
             <div class="hud-overlay">
+                <!-- Mobile Controls overlaying the game canvas -->
+                <div class="mobile-controls">
+                    <div class="mobile-joystick" id="mobileJoystick">
+                        <div class="mobile-joystick-knob" id="mobileJoystickKnob"></div>
+                    </div>
+                    <div class="mobile-buttons">
+                        <div class="mobile-button" id="mobileAttackButton">⚔️</div>
+                    </div>
+                </div>
             </div>
-            
 
-            
             <div class="respawn-overlay" id="respawnOverlay">
                 <div class="death-icon">💀</div>
                 <div class="death-message">Eliminated</div>
@@ -1197,16 +1207,6 @@
                     <div class="username-info">Maximum 15 characters</div>
                     <button class="username-button" onclick="submitUsername()">JOIN THE BONK</button>
                 </div>
-            </div>
-                </div>
-
-        <!-- Mobile Controls moved outside game arena -->
-        <div class="mobile-controls">
-            <div class="mobile-joystick" id="mobileJoystick">
-                <div class="mobile-joystick-knob" id="mobileJoystickKnob"></div>
-            </div>
-            <div class="mobile-buttons">
-                <div class="mobile-button" id="mobileAttackButton">⚔️</div>
             </div>
         </div>
         
