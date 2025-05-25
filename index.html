@@ -649,12 +649,13 @@
             }
 
             .game-header {
-                margin: 0;
-                padding: 5px;
+                margin: 0 0 10px 0;
+                padding: 4px 6px;
                 flex-shrink: 0;
-                height: 50px;
+                height: 35px;
                 display: flex;
                 align-items: center;
+                justify-content: space-between;
             }
 
             .game-title {
@@ -663,7 +664,10 @@
             }
 
             .leaderboard {
-                display: none;
+                padding: 12px;
+                margin-bottom: 15px;
+                border-radius: 8px;
+                flex-shrink: 0;
             }
 
             .leaderboard-title {
@@ -688,22 +692,25 @@
                 display: flex;
                 flex-direction: column;
                 position: relative;
-                margin: 0;
+                margin: 0 0 10px 0;
             }
 
             .game-title {
-                font-size: 20px;
-                letter-spacing: 1px;
+                font-size: 14px;
+                letter-spacing: 0.5px;
+                white-space: nowrap;
             }
 
             .status-indicators {
                 justify-content: flex-end;
-                gap: 8px;
+                gap: 6px;
             }
 
             .connection-badge {
-                font-size: 10px;
-                padding: 4px 8px;
+                font-size: 8px;
+                padding: 2px 5px;
+                border-radius: 10px;
+                white-space: nowrap;
             }
 
             #gameCanvas {
@@ -717,23 +724,24 @@
             .player-hud {
                 position: static;
                 flex-direction: row;
-                gap: 8px;
-                margin: 0;
+                gap: 6px;
+                margin: 0 0 15px 0;
                 padding: 8px;
                 flex-shrink: 0;
                 background: rgba(0, 0, 0, 0.9);
                 height: 60px;
                 display: flex;
                 align-items: center;
+                overflow: hidden;
             }
 
             .health-panel,
             .stats-panel {
                 min-width: auto;
                 width: 50%;
-                padding: 2px 4px;
-                border-radius: 3px;
-                font-size: 9px;
+                padding: 4px 6px;
+                border-radius: 4px;
+                font-size: 10px;
             }
 
             .health-label {
@@ -752,16 +760,16 @@
             }
 
             .stat-row {
-                margin-bottom: 4px;
-                font-size: 11px;
-            }
-
-            .stat-label {
+                margin-bottom: 2px;
                 font-size: 10px;
             }
 
+            .stat-label {
+                font-size: 9px;
+            }
+
             .stat-value {
-                font-size: 12px;
+                font-size: 11px;
             }
 
             .leaderboard-title {
@@ -901,10 +909,10 @@
                 align-items: center;
                 pointer-events: auto;
                 position: static;
-                padding: 12px 20px;
-                margin: 0;
-                background: rgba(0, 0, 0, 0.9);
-                border-top: 1px solid rgba(255, 107, 0, 0.3);
+                padding: 15px 20px;
+                margin: 10px 0 0 0;
+                background: transparent;
+                border: none;
                 border-radius: 0;
                 height: 90px;
                 width: 100%;
@@ -1069,7 +1077,7 @@
 <body>
     <div class="game-interface">
         <div class="game-header">
-            <h1 class="game-title">🔥 BONKERS ARENA</h1>
+            <h1 class="game-title">🔥 BONKERS</h1>
             <div class="status-indicators">
                 <div class="connection-badge disconnected" id="connectionStatus">Disconnected</div>
                 <div class="connection-badge players-count" id="playersCount">0 Players</div>
@@ -2050,8 +2058,20 @@
                 ctx.save();
                 
                 // Calculate attack animation with smooth interpolation
-                let targetAngle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
-                const mouseOnRight = mouse.x > player.x;
+                let targetAngle;
+                if (isMobile) {
+                    // On mobile, bat follows movement direction
+                    if (mobileTouch.movement.x !== 0 || mobileTouch.movement.y !== 0) {
+                        targetAngle = Math.atan2(mobileTouch.movement.y, mobileTouch.movement.x);
+                    } else {
+                        // Default to player direction when not moving
+                        targetAngle = player.direction === 1 ? Math.PI : 0;
+                    }
+                } else {
+                    // On desktop, bat follows mouse
+                    targetAngle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+                }
+                const mouseOnRight = !isMobile ? mouse.x > player.x : mobileTouch.movement.x > 0;
                 
                 if (isAttacking) {
                     const progress = (Date.now() - attackStartTime) / ATTACK_DURATION;
