@@ -822,18 +822,20 @@
 
             .leaderboard-list {
                 display: flex;
-                flex-direction: row;
-                gap: 8px;
-                overflow-x: auto;
-                justify-content: center;
+                flex-direction: column;
+                gap: 4px;
+                overflow: visible;
+                justify-content: flex-start;
             }
 
             .leaderboard-item {
-                padding: 10px 15px;
+                padding: 8px 12px;
                 margin-bottom: 0;
-                border-radius: 10px;
-                min-width: 140px;
+                border-radius: 8px;
+                min-width: auto;
                 flex-shrink: 0;
+                width: 100%;
+                box-sizing: border-box;
             }
 
             .leaderboard-rank {
@@ -1845,40 +1847,76 @@
             
             const player = gameState.myPlayer;
             
-            // Instead of using precise mouse angle, use area-based attack
-            // Attack in the direction the player is facing (left/right)
-            let attackDirection = player.direction || 1; // Default to left if no direction
-            
-            // If mouse is on opposite side of player, attack in that direction
-            if (mouse.x > player.x && attackDirection === 1) {
-                attackDirection = -1; // Attack right
-            } else if (mouse.x < player.x && attackDirection === -1) {
-                attackDirection = 1; // Attack left
-            }
-            
-            // Calculate attack angle based on direction (wide sweep)
-            const baseAngle = attackDirection === 1 ? Math.PI : 0; // Left = π, Right = 0
-            
-            if (socket && socket.connected) {
-                // Send area attack instead of precise angle
-                socket.emit('areaAttack', { 
-                    direction: attackDirection,
-                    baseAngle: baseAngle
-                });
-            }
-            
-            // Start attack animation with the base angle for visual feedback
-            isAttacking = true;
-            attackStartTime = Date.now();
-            attackAngle = baseAngle;
-            
-            // Broadcast attack animation to other players
-            if (socket && socket.connected) {
-                socket.emit('attackAnimation', {
-                    playerId: gameState.myId,
-                    angle: baseAngle,
-                    timestamp: Date.now()
-                });
+            if (isMobile) {
+                // Mobile: Use much more forgiving area-based attack
+                let attackDirection = player.direction || 1; // Default to left if no direction
+                
+                // On mobile, attack in the direction the player is facing or moving
+                if (mobileTouch.movement.x > 0.1) {
+                    attackDirection = -1; // Moving right, attack right
+                } else if (mobileTouch.movement.x < -0.1) {
+                    attackDirection = 1; // Moving left, attack left
+                }
+                
+                const baseAngle = attackDirection === 1 ? Math.PI : 0; // Left = π, Right = 0
+                
+                if (socket && socket.connected) {
+                    // Send enhanced mobile area attack with larger range
+                    socket.emit('mobileAreaAttack', { 
+                        direction: attackDirection,
+                        baseAngle: baseAngle,
+                        isMobile: true
+                    });
+                }
+                
+                // Start attack animation
+                isAttacking = true;
+                attackStartTime = Date.now();
+                attackAngle = baseAngle;
+                
+                // Broadcast attack animation
+                if (socket && socket.connected) {
+                    socket.emit('attackAnimation', {
+                        playerId: gameState.myId,
+                        angle: baseAngle,
+                        timestamp: Date.now()
+                    });
+                }
+            } else {
+                // Desktop: Use original precise attack system
+                let attackDirection = player.direction || 1; // Default to left if no direction
+                
+                // If mouse is on opposite side of player, attack in that direction
+                if (mouse.x > player.x && attackDirection === 1) {
+                    attackDirection = -1; // Attack right
+                } else if (mouse.x < player.x && attackDirection === -1) {
+                    attackDirection = 1; // Attack left
+                }
+                
+                // Calculate attack angle based on direction (wide sweep)
+                const baseAngle = attackDirection === 1 ? Math.PI : 0; // Left = π, Right = 0
+                
+                if (socket && socket.connected) {
+                    // Send area attack instead of precise angle
+                    socket.emit('areaAttack', { 
+                        direction: attackDirection,
+                        baseAngle: baseAngle
+                    });
+                }
+                
+                // Start attack animation with the base angle for visual feedback
+                isAttacking = true;
+                attackStartTime = Date.now();
+                attackAngle = baseAngle;
+                
+                // Broadcast attack animation to other players
+                if (socket && socket.connected) {
+                    socket.emit('attackAnimation', {
+                        playerId: gameState.myId,
+                        angle: baseAngle,
+                        timestamp: Date.now()
+                    });
+                }
             }
             
             // Enhanced bonk sound with better volume
