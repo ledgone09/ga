@@ -493,6 +493,99 @@
             cursor: not-allowed;
             transform: none;
         }
+
+        .leaderboard {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 280px;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(15px);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            padding: 20px;
+            z-index: 20;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .leaderboard-title {
+            font-size: 18px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #00d4ff, #7c3aed);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-align: center;
+            margin-bottom: 16px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .leaderboard-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            border-left: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .leaderboard-item.first {
+            border-left-color: #ffd700;
+            background: rgba(255, 215, 0, 0.1);
+        }
+
+        .leaderboard-item.second {
+            border-left-color: #c0c0c0;
+            background: rgba(192, 192, 192, 0.1);
+        }
+
+        .leaderboard-item.third {
+            border-left-color: #cd7f32;
+            background: rgba(205, 127, 50, 0.1);
+        }
+
+        .leaderboard-rank {
+            font-size: 16px;
+            font-weight: 900;
+            width: 24px;
+            text-align: center;
+        }
+
+        .leaderboard-rank.first { color: #ffd700; }
+        .leaderboard-rank.second { color: #c0c0c0; }
+        .leaderboard-rank.third { color: #cd7f32; }
+
+        .leaderboard-player {
+            flex: 1;
+            margin-left: 12px;
+        }
+
+        .leaderboard-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 2px;
+        }
+
+        .leaderboard-stats {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .leaderboard-kills {
+            font-size: 16px;
+            font-weight: 900;
+            color: #00d4ff;
+        }
     </style>
 </head>
 <body>
@@ -539,13 +632,26 @@
                 </div>
             </div>
             
-            <div class="kill-feed" id="killFeed"></div>
-            
             <div class="respawn-overlay" id="respawnOverlay">
                 <div class="death-icon">💀</div>
                 <div class="death-message">Eliminated</div>
                 <div class="killer-info">Killed by: <span id="killerName">Unknown</span></div>
                 <button class="respawn-button" onclick="requestRespawn()">Respawn</button>
+            </div>
+            
+            <!-- Leaderboard -->
+            <div class="leaderboard" id="leaderboard">
+                <div class="leaderboard-title">🏆 Top Warriors</div>
+                <div class="leaderboard-list" id="leaderboardList">
+                    <div class="leaderboard-item">
+                        <div class="leaderboard-rank">-</div>
+                        <div class="leaderboard-player">
+                            <div class="leaderboard-name">No players yet</div>
+                            <div class="leaderboard-stats">Waiting for warriors...</div>
+                        </div>
+                        <div class="leaderboard-kills">0</div>
+                    </div>
+                </div>
             </div>
             
             <!-- Username Input Modal -->
@@ -646,6 +752,10 @@
         
         // Kill feed
         let killFeed = [];
+
+        // Leaderboard
+        let leaderboardData = [];
+        let lastLeaderboardUpdate = 0;
         
         // Input handling
         const keys = {};
@@ -819,6 +929,7 @@
                             requestAnimationFrame(gameLoop);
                         }
                         updateHUD();
+                        updateLeaderboard();
                     }
                 });
 
@@ -855,11 +966,13 @@
                         // Keep local position - NEVER update x,y from server
                     }
                     updateHUD();
+                    updateLeaderboard();
                 });
 
                 socket.on('playerLeft', (playerId) => {
                     delete gameState.players[playerId];
                     updateHUD();
+                    updateLeaderboard();
                 });
 
                 socket.on('playerCountUpdate', (count) => {
@@ -880,7 +993,11 @@
 
                 socket.on('playerKilled', (data) => {
                     const { killer, victim } = data;
-                    addToKillFeed(`${killer.name} eliminated ${victim.name}`);
+                    
+                    // Update game state with new kill count
+                    if (gameState.players[killer.id]) {
+                        gameState.players[killer.id].kills = killer.kills;
+                    }
                     
                     if (victim.id === gameState.myId) {
                         showRespawnScreen(killer.name);
@@ -892,6 +1009,9 @@
                         stats.kills++;
                         updateStats();
                     }
+                    
+                    // Update leaderboard
+                    updateLeaderboard();
                 });
 
                 socket.on('playerRespawned', (player) => {
@@ -1072,6 +1192,9 @@
             drawHitEffects();
             drawCrosshair();
 
+            // Update leaderboard periodically
+            updateLeaderboard();
+
             requestAnimationFrame(gameLoop);
         }
         
@@ -1228,18 +1351,6 @@
                     size: 3 + Math.random() * 2
                 });
             }
-        }
-        
-        function createParticle(x, y, color = '#ff4444') {
-            particles.push({
-                x: x,
-                y: y,
-                dx: (Math.random() - 0.5) * 4,
-                dy: (Math.random() - 0.5) * 4,
-                life: 60,
-                maxLife: 60,
-                color: color
-            });
         }
         
         function addToKillFeed(message) {
@@ -1723,6 +1834,73 @@
         // Global functions for HTML onclick handlers
         window.submitUsername = submitUsername;
         window.requestRespawn = requestRespawn;
+
+        function updateLeaderboard() {
+            const now = Date.now();
+            // Update leaderboard every 2 seconds to avoid spam
+            if (now - lastLeaderboardUpdate < 2000) return;
+            lastLeaderboardUpdate = now;
+            
+            // Collect all players with their stats
+            leaderboardData = Object.values(gameState.players)
+                .filter(player => player && player.name)
+                .map(player => ({
+                    id: player.id,
+                    name: player.name,
+                    kills: player.kills || 0,
+                    health: player.health || 0,
+                    maxHealth: player.maxHealth || 100
+                }))
+                .sort((a, b) => b.kills - a.kills) // Sort by kills descending
+                .slice(0, 3); // Take top 3
+            
+            updateLeaderboardDisplay();
+        }
+
+        function updateLeaderboardDisplay() {
+            const leaderboardList = document.getElementById('leaderboardList');
+            leaderboardList.innerHTML = '';
+            
+            if (leaderboardData.length === 0) {
+                leaderboardList.innerHTML = `
+                    <div class="leaderboard-item">
+                        <div class="leaderboard-rank">-</div>
+                        <div class="leaderboard-player">
+                            <div class="leaderboard-name">No players yet</div>
+                            <div class="leaderboard-stats">Waiting for warriors...</div>
+                        </div>
+                        <div class="leaderboard-kills">0</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            leaderboardData.forEach((player, index) => {
+                const rank = index + 1;
+                const rankClass = rank === 1 ? 'first' : rank === 2 ? 'second' : 'third';
+                const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
+                const healthPercent = Math.round((player.health / player.maxHealth) * 100);
+                const isMyPlayer = player.id === gameState.myId;
+                
+                const itemDiv = document.createElement('div');
+                itemDiv.className = `leaderboard-item ${rankClass}`;
+                if (isMyPlayer) {
+                    itemDiv.style.background = 'rgba(0, 212, 255, 0.15)';
+                    itemDiv.style.borderLeftColor = '#00d4ff';
+                }
+                
+                itemDiv.innerHTML = `
+                    <div class="leaderboard-rank ${rankClass}">${rankIcon}</div>
+                    <div class="leaderboard-player">
+                        <div class="leaderboard-name">${player.name}${isMyPlayer ? ' (You)' : ''}</div>
+                        <div class="leaderboard-stats">Health: ${healthPercent}%</div>
+                    </div>
+                    <div class="leaderboard-kills">${player.kills}</div>
+                `;
+                
+                leaderboardList.appendChild(itemDiv);
+            });
+        }
     </script>
 </body>
 </html>
