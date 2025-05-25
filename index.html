@@ -1371,6 +1371,100 @@
 
             // Debug movement input
             if (dx !== 0 || dy !== 0) {
+                console.log('🎮 Movement input detected:', { dx, dy, playerPos: { x: gameState.myPlayer?.x, y: gameState.myPlayer?.y } });
+            }
+
+            // If there's movement input
+            if (dx !== 0 || dy !== 0) {
+                // Normalize diagonal movement
+                if (dx !== 0 && dy !== 0) {
+                    const normalizer = 1 / Math.sqrt(2);
+                    dx *= normalizer;
+                    dy *= normalizer;
+                }
+
+                // Apply speed and delta time
+                const moveSpeed = PLAYER_SPEED * (deltaTime / 16);
+                dx *= moveSpeed;
+                dy *= moveSpeed;
+
+                // Calculate new position using world boundaries
+                const newX = Math.max(PLAYER_SIZE/2, Math.min(WORLD_WIDTH - PLAYER_SIZE/2, gameState.myPlayer.x + dx));
+                const newY = Math.max(PLAYER_SIZE/2, Math.min(WORLD_HEIGHT - PLAYER_SIZE/2, gameState.myPlayer.y + dy));
+
+                // Update local position immediately for smooth movement
+                gameState.myPlayer.x = newX;
+                gameState.myPlayer.y = newY;
+                
+                // IMPORTANT: Also update the position in the players collection
+                if (gameState.players[gameState.myId]) {
+                    gameState.players[gameState.myId].x = newX;
+                    gameState.players[gameState.myId].y = newY;
+                    gameState.players[gameState.myId].direction = gameState.myPlayer.direction;
+                }
+
+                // Only send update to server if enough time has passed
+                const now = Date.now();
+                const timeSinceLastUpdate = now - lastMovementUpdate;
+                const distanceMoved = Math.sqrt(
+                    Math.pow(newX - lastSentPosition.x, 2) + 
+                    Math.pow(newY - lastSentPosition.y, 2)
+                );
+
+                if (timeSinceLastUpdate >= MOVEMENT_UPDATE_RATE && distanceMoved >= MIN_MOVEMENT_DISTANCE) {
+                    if (socket && socket.connected) {
+                        const weaponAngle = Math.atan2(mouse.y - gameState.myPlayer.y, mouse.x - gameState.myPlayer.x);
+                        
+                        socket.emit('move', {
+                            x: newX,
+                            y: newY,
+                            direction: gameState.myPlayer.direction,
+                            weaponAngle: weaponAngle
+                        });
+                        lastMovementUpdate = now;
+                        lastSentPosition = { x: newX, y: newY };
+                    }
+                }
+            }
+
+            // Update camera to follow player
+            if (gameState.myPlayer) {
+                camera.targetX = gameState.myPlayer.x - CANVAS_WIDTH / 2;
+                camera.targetY = gameState.myPlayer.y - CANVAS_HEIGHT / 2;
+                
+                camera.x += (camera.targetX - camera.x) * camera.smoothing;
+                camera.y += (camera.targetY - camera.y) * camera.smoothing;
+                
+                camera.x = Math.max(0, Math.min(WORLD_WIDTH - CANVAS_WIDTH, camera.x));
+                camera.y = Math.max(0, Math.min(WORLD_HEIGHT - CANVAS_HEIGHT, camera.y));
+            }
+
+            // Clear and render with camera translation
+            ctx.save();
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.translate(-camera.x, -camera.y);
+
+            drawGrid();
+            
+            // Update interpolated positions for other players
+            const now2 = Date.now();
+            for (const playerId in playerInterpolationData) {
+                const interpData = playerInterpolationData[playerId];
+                const player = gameState.players[playerId];
+                
+                if (player && interpData) {
+                    const elapsed = now2 - interpData.startTime;
+                    const duration = 60;
+                    
+                    if (elapsed < duration) {
+                        const progress = elapsed / duration;
+                        const easeOutCubic = 1 - Math.pow(1 - progress, 3);
+                        
+                        player.x = interpData.startX + (interpData.targetX - interpData.startX) * easeOutCubic;
+                        player.y = interpData.startY + (interpData.targetY - interpData.startY) * easeOutCubic;
+                    } else {
                         // Interpolation complete, snap to target
                         player.x = interpData.targetX;
                         player.y = interpData.targetY;
@@ -2362,13 +2456,13 @@
         drawGrid();
         
         // Update interpolated positions for other players
-        const now = Date.now();
+        const now2 = Date.now();
         for (const playerId in playerInterpolationData) {
             const interpData = playerInterpolationData[playerId];
             const player = gameState.players[playerId];
             
             if (player && interpData) {
-                const elapsed = now - interpData.startTime;
+                const elapsed = now2 - interpData.startTime;
                 const duration = 60;
                 
                 if (elapsed < duration) {
@@ -2378,12 +2472,42 @@
                     player.x = interpData.startX + (interpData.targetX - interpData.startX) * easeOutCubic;
                     player.y = interpData.startY + (interpData.targetY - interpData.startY) * easeOutCubic;
                 } else {
+                    // Interpolation complete, snap to target
                     player.x = interpData.targetX;
                     player.y = interpData.targetY;
                     delete playerInterpolationData[playerId];
                 }
             }
         }
+        
+        // Draw all players
+        let myPlayerDrawn = false;
+        for (const playerId in gameState.players) {
+            const player = gameState.players[playerId];
+            if (player && player.health > 0) {
+                drawPlayer(player);
+                if (playerId === gameState.myId) {
+                    myPlayerDrawn = true;
+                    console.log('🎨 Drawing my player from players collection at:', { x: player.x, y: player.y });
+                }
+            }
+        }
+        
+        // Ensure myPlayer is always drawn (fallback)
+        if (!myPlayerDrawn && gameState.myPlayer && gameState.myPlayer.health > 0) {
+            console.log('🎨 Drawing myPlayer as fallback at:', { x: gameState.myPlayer.x, y: gameState.myPlayer.y });
+            drawPlayer(gameState.myPlayer);
+        }
+
+        drawHitEffects();
+        
+        // Restore camera transformation for UI elements
+        ctx.restore();
+        
+        drawCrosshair();
+
+        // Update leaderboard periodically
+        updateLeaderboard();
     </script>
 </body>
 </html>
