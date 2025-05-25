@@ -627,6 +627,7 @@
                 min-height: 100dvh;
                 display: flex;
                 flex-direction: column;
+                overflow: hidden;
             }
 
             .game-interface {
@@ -637,6 +638,7 @@
                 display: flex;
                 flex-direction: column;
                 height: 100vh;
+                overflow: hidden;
             }
 
             .game-header {
@@ -649,10 +651,11 @@
                 padding: 5px 10px;
                 background: rgba(0, 0, 0, 0.8);
                 border-radius: 10px;
+                flex-shrink: 0;
             }
 
             .game-title {
-                font-size: 20px;
+                font-size: 18px;
                 letter-spacing: 1px;
             }
 
@@ -662,119 +665,143 @@
             }
 
             .connection-badge {
+                font-size: 9px;
+                padding: 3px 6px;
+            }
+
+            /* Move leaderboard above game screen */
+            .leaderboard {
+                position: static;
+                width: 100%;
+                padding: 8px 10px;
+                max-height: none;
+                border-radius: 8px;
+                margin: 3px 0;
+                background: rgba(0, 0, 0, 0.9);
+                order: 1;
+                flex-shrink: 0;
+            }
+
+            .leaderboard-title {
+                font-size: 12px;
+                margin-bottom: 6px;
+                text-align: center;
+            }
+
+            .leaderboard-list {
+                display: flex;
+                flex-direction: row;
+                gap: 4px;
+                justify-content: center;
+                overflow-x: auto;
+            }
+
+            .leaderboard-item {
+                padding: 6px 8px;
+                margin-bottom: 0;
+                border-radius: 6px;
+                min-width: 90px;
+                max-width: 110px;
+                flex-shrink: 0;
+                text-align: center;
+            }
+
+            .leaderboard-rank {
+                font-size: 14px;
+                width: auto;
+                display: block;
+                margin-bottom: 2px;
+            }
+
+            .leaderboard-player {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .leaderboard-name {
                 font-size: 10px;
-                padding: 4px 8px;
+                margin-bottom: 1px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 80px;
+            }
+
+            .leaderboard-stats {
+                font-size: 8px;
+            }
+
+            .leaderboard-kills {
+                font-size: 12px;
+                margin-top: 2px;
             }
 
             #gameCanvas {
                 width: 100% !important;
-                height: 50vh !important;
+                height: 40vh !important;
                 max-width: 100vw;
                 object-fit: contain;
                 border-radius: 8px;
+                order: 2;
+                flex-shrink: 0;
             }
 
             .game-arena {
                 width: 100%;
                 max-width: 100vw;
-                flex: 1;
                 display: flex;
                 flex-direction: column;
                 position: relative;
+                order: 2;
+                flex-shrink: 0;
             }
 
             .player-hud {
                 position: static;
                 flex-direction: row;
-                gap: 10px;
-                margin: 5px 0;
+                gap: 8px;
+                margin: 3px 0;
                 padding: 0;
+                order: 3;
+                flex-shrink: 0;
             }
 
             .health-panel,
             .stats-panel {
                 min-width: auto;
                 width: 50%;
-                padding: 10px 15px;
-                border-radius: 10px;
-                font-size: 12px;
+                padding: 8px 12px;
+                border-radius: 8px;
+                font-size: 10px;
             }
 
             .health-label {
-                font-size: 11px;
-                margin-bottom: 4px;
+                font-size: 9px;
+                margin-bottom: 3px;
             }
 
             .health-bar-container {
-                height: 12px;
-                border-radius: 6px;
+                height: 10px;
+                border-radius: 5px;
             }
 
             .health-text {
-                font-size: 12px;
-                margin-top: 4px;
+                font-size: 10px;
+                margin-top: 3px;
             }
 
             .stat-row {
-                margin-bottom: 4px;
-                font-size: 11px;
+                margin-bottom: 3px;
+                font-size: 9px;
             }
 
             .stat-label {
-                font-size: 10px;
+                font-size: 8px;
             }
 
             .stat-value {
-                font-size: 12px;
-            }
-
-            /* Move leaderboard outside game area */
-            .leaderboard {
-                position: static;
-                width: 100%;
-                padding: 10px;
-                max-height: none;
-                border-radius: 10px;
-                margin: 5px 0;
-                background: rgba(0, 0, 0, 0.9);
-            }
-
-            .leaderboard-title {
-                font-size: 14px;
-                margin-bottom: 8px;
-            }
-
-            .leaderboard-list {
-                display: flex;
-                flex-direction: row;
-                gap: 5px;
-                overflow-x: auto;
-            }
-
-            .leaderboard-item {
-                padding: 8px 12px;
-                margin-bottom: 0;
-                border-radius: 8px;
-                min-width: 120px;
-                flex-shrink: 0;
-            }
-
-            .leaderboard-rank {
-                font-size: 16px;
-                width: auto;
-            }
-
-            .leaderboard-name {
-                font-size: 12px;
-                margin-bottom: 2px;
-            }
-
-            .leaderboard-stats {
                 font-size: 10px;
-            }
-
-            .leaderboard-kills {
-                font-size: 14px;
             }
 
             .controls-info {
@@ -853,221 +880,86 @@
             }
         }
 
-        /* Mobile Touch Controls - Outside game area */
+        /* Mobile Touch Controls - Fixed at bottom */
         .mobile-controls {
             display: none;
             position: static;
             width: 100%;
-            padding: 10px;
+            padding: 8px 10px;
             background: rgba(0, 0, 0, 0.9);
-            border-radius: 10px;
-            margin-top: 5px;
+            border-radius: 8px;
+            margin-top: auto;
             box-sizing: border-box;
+            order: 4;
+            flex-shrink: 0;
         }
 
         @media (max-width: 768px) {
             .mobile-controls {
                 display: flex;
                 justify-content: space-between;
-                align-items: end;
+                align-items: center;
                 pointer-events: auto;
             }
         }
 
         .mobile-joystick {
-            width: 180px;
-            height: 180px;
+            width: 80px;
+            height: 80px;
             background: rgba(255, 107, 0, 0.25);
-            border: 4px solid rgba(255, 107, 0, 0.5);
+            border: 3px solid rgba(255, 107, 0, 0.5);
             border-radius: 50%;
             position: relative;
             touch-action: none;
             user-select: none;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
         .mobile-joystick-knob {
-            width: 80px;
-            height: 80px;
+            width: 32px;
+            height: 32px;
             background: linear-gradient(135deg, #ff6b00, #ffd700);
-            border: 4px solid rgba(255, 255, 255, 0.4);
+            border: 2px solid rgba(255, 255, 255, 0.4);
             border-radius: 50%;
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             transition: all 0.1s ease;
-            box-shadow: 0 8px 20px rgba(255, 107, 0, 0.5);
+            box-shadow: 0 3px 8px rgba(255, 107, 0, 0.5);
         }
 
         .mobile-buttons {
             display: flex;
-            flex-direction: column;
-            gap: 25px;
+            flex-direction: row;
+            gap: 12px;
         }
 
         .mobile-button {
-            width: 100px;
-            height: 100px;
+            width: 50px;
+            height: 50px;
             background: linear-gradient(135deg, #ff6b00, #ffd700);
-            border: 4px solid rgba(255, 255, 255, 0.4);
+            border: 3px solid rgba(255, 255, 255, 0.4);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 36px;
+            font-size: 20px;
             color: white;
-            text-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
             touch-action: manipulation;
             user-select: none;
-            box-shadow: 0 8px 20px rgba(255, 107, 0, 0.5);
+            box-shadow: 0 4px 12px rgba(255, 107, 0, 0.5);
             transition: all 0.1s ease;
         }
 
         .mobile-button:active {
             transform: scale(0.95);
-            box-shadow: 0 4px 12px rgba(255, 107, 0, 0.7);
+            box-shadow: 0 2px 8px rgba(255, 107, 0, 0.7);
         }
 
         .mobile-info {
-            position: fixed;
-            bottom: 220px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.9);
-            color: rgba(255, 255, 255, 0.9);
-            padding: 15px 25px;
-            border-radius: 30px;
-            font-size: 16px;
-            font-weight: 600;
-            border: 2px solid rgba(255, 107, 0, 0.4);
             display: none;
-            backdrop-filter: blur(15px);
-            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.5);
-        }
-
-        @media (max-width: 768px) {
-            .mobile-info {
-                display: block;
-            }
-        }
-
-        /* Improve button visibility and accessibility on mobile */
-        @media (max-width: 768px) {
-            .username-button:hover {
-                transform: none; /* Disable hover effects on mobile */
-                box-shadow: 0 4px 12px rgba(255, 107, 0, 0.4);
-            }
-
-            .respawn-button:hover {
-                transform: none;
-                box-shadow: 0 4px 12px rgba(255, 107, 0, 0.4);
-            }
-
-            /* Better touch feedback */
-            .username-button:active {
-                transform: scale(0.98);
-                background: linear-gradient(135deg, #ff4757, #ff6b00);
-            }
-
-            .respawn-button:active {
-                transform: scale(0.98);
-                background: linear-gradient(135deg, #ff4757, #ff6b00);
-            }
-
-            /* Improve text readability on mobile */
-            .username-overlay {
-                background: rgba(0, 0, 0, 0.98);
-            }
-        }
-
-        /* Extra small screens (phones in portrait) */
-        @media (max-width: 480px) {
-            .game-title {
-                font-size: 18px;
-                letter-spacing: 1px;
-            }
-
-            .username-title {
-                font-size: 20px;
-                letter-spacing: 1px;
-            }
-
-            .username-modal {
-                width: 98%;
-                padding: 20px 15px;
-                margin: 5px;
-            }
-
-            .username-input {
-                font-size: 14px;
-                padding: 12px;
-            }
-
-            .username-button {
-                font-size: 14px;
-                padding: 12px 20px;
-            }
-
-            .mobile-joystick {
-                width: 80px;
-                height: 80px;
-            }
-
-            .mobile-joystick-knob {
-                width: 30px;
-                height: 30px;
-            }
-
-            .mobile-button {
-                width: 50px;
-                height: 50px;
-                font-size: 20px;
-            }
-        }
-
-        /* Landscape mobile optimization */
-        @media (max-width: 768px) and (orientation: landscape) {
-            #gameCanvas {
-                height: 60vh !important;
-            }
-
-            .player-hud {
-                position: absolute;
-                bottom: 10px;
-                left: 10px;
-                right: 10px;
-                background: rgba(0, 0, 0, 0.8);
-                border-radius: 8px;
-                padding: 5px;
-            }
-
-            .leaderboard {
-                position: absolute;
-                top: 50px;
-                right: 10px;
-                width: 200px;
-                margin: 0;
-            }
-
-            .leaderboard-list {
-                flex-direction: column;
-            }
-
-            .leaderboard-item {
-                min-width: auto;
-            }
-
-            .mobile-controls {
-                position: absolute;
-                bottom: 10px;
-                left: 50%;
-                transform: translateX(-50%);
-                width: auto;
-                background: transparent;
-                margin: 0;
-                padding: 5px;
-            }
         }
     </style>
 </head>
