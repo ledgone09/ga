@@ -555,6 +555,7 @@
         let lastProcessedInput = 0;
         let lastSentPosition = { x: 0, y: 0 };
         let playerInterpolationData = {}; // Store interpolation data for other players
+        let playerAttackAnimations = {}; // Store attack animations for other players
         
         // Socket connection
         let socket = null;
@@ -739,6 +740,18 @@
                     }
                 });
 
+                socket.on('attackAnimation', (data) => {
+                    // Store attack animation data for other players
+                    if (data.playerId !== gameState.myId) {
+                        playerAttackAnimations[data.playerId] = {
+                            angle: data.angle,
+                            startTime: Date.now(),
+                            isAttacking: true
+                        };
+                        console.log('👊 Received attack animation from:', data.playerId);
+                    }
+                });
+
             } catch (error) {
                 console.error('Connection failed:', error);
                 updateConnectionStatus('disconnected');
@@ -856,15 +869,15 @@
                 
                 if (player && interpData) {
                     const elapsed = now - interpData.startTime;
-                    const duration = 100; // Interpolation duration in ms
+                    const duration = 60; // Reduced from 100ms to 60ms for smoother movement
                     
                     if (elapsed < duration) {
-                        // Interpolate position
+                        // Improved interpolation with easeOutCubic for more natural movement
                         const progress = elapsed / duration;
-                        const smoothProgress = progress * progress * (3 - 2 * progress); // Smooth step function
+                        const easeOutCubic = 1 - Math.pow(1 - progress, 3);
                         
-                        player.x = interpData.startX + (interpData.targetX - interpData.startX) * smoothProgress;
-                        player.y = interpData.startY + (interpData.targetY - interpData.startY) * smoothProgress;
+                        player.x = interpData.startX + (interpData.targetX - interpData.startX) * easeOutCubic;
+                        player.y = interpData.startY + (interpData.targetY - interpData.startY) * easeOutCubic;
                     } else {
                         // Interpolation complete, snap to target
                         player.x = interpData.targetX;
@@ -965,6 +978,15 @@
             isAttacking = true;
             attackStartTime = Date.now();
             attackAngle = angle;
+            
+            // Broadcast attack animation to other players
+            if (socket && socket.connected) {
+                socket.emit('attackAnimation', {
+                    playerId: gameState.myId,
+                    angle: angle,
+                    timestamp: Date.now()
+                });
+            }
             
             // Enhanced bonk sound with better volume
             const bonkSound = new Audio('data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAAABmYWN0BAAAAAAAAABkYXRhAAAAAA==');
@@ -1270,13 +1292,53 @@
                 // Draw weapon for other players using their real weapon angle
                 ctx.save();
                 
-                // Use the player's actual weapon angle from server data
-                const weaponAngle = player.weaponAngle || 0;
+                // Check if this player is attacking
+                const attackData = playerAttackAnimations[player.id];
+                let weaponAngle = player.weaponAngle || 0;
+                let isOtherPlayerAttacking = false;
+                
+                if (attackData && attackData.isAttacking) {
+                    const elapsed = Date.now() - attackData.startTime;
+                    if (elapsed < ATTACK_DURATION) {
+                        // Calculate attack animation progress
+                        const progress = elapsed / ATTACK_DURATION;
+                        const swingProgress = Math.sin(progress * Math.PI);
+                        const swingAmount = ATTACK_ANGLE;
+                        const swingEase = swingProgress * swingProgress;
+                        weaponAngle = attackData.angle + swingAmount * swingEase;
+                        isOtherPlayerAttacking = true;
+                    } else {
+                        // Attack animation finished
+                        attackData.isAttacking = false;
+                    }
+                } else {
+                    // Use normal weapon angle
+                    weaponAngle = player.weaponAngle || 0;
+                }
                 
                 ctx.rotate(weaponAngle);
                 ctx.rotate(Math.PI);
                 
-                // Draw bat for other players
+                // Draw attack motion blur for other players
+                if (isOtherPlayerAttacking) {
+                    ctx.globalAlpha = 0.3;
+                    if (batSprite && batSprite.complete && batSprite.naturalHeight !== 0) {
+                        ctx.drawImage(
+                            batSprite,
+                            -BAT_SIZE - 5,
+                            -BAT_SIZE/2,
+                            BAT_SIZE,
+                            BAT_SIZE * 0.8
+                        );
+                    } else {
+                        // Fallback bat motion blur
+                        ctx.fillStyle = '#8B4513';
+                        ctx.fillRect(-BAT_SIZE - 5, -4, BAT_SIZE * 0.8, 8);
+                    }
+                    ctx.globalAlpha = 0.8;
+                }
+                
+                // Draw main bat for other players
                 if (batSprite && batSprite.complete && batSprite.naturalHeight !== 0) {
                     ctx.drawImage(
                         batSprite,

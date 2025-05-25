@@ -178,7 +178,10 @@ io.on('connection', (socket) => {
                 const dy = player.y - attacker.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
-                if (distance <= MELEE_RANGE) {
+                // Use player radius instead of single point hit detection
+                const playerRadius = PLAYER_RADIUS + 10; // Add some extra range for easier hitting
+                
+                if (distance <= MELEE_RANGE + playerRadius) {
                     const angleToPlayer = Math.atan2(dy, dx);
                     let angleDiff = Math.abs(angleToPlayer - data.angle);
                     
@@ -191,6 +194,7 @@ io.on('connection', (socket) => {
                         attacker: socket.id, 
                         target: playerId, 
                         distance, 
+                        playerRadius,
                         angleToPlayer: angleToPlayer * 180 / Math.PI, 
                         attackAngle: data.angle * 180 / Math.PI, 
                         angleDiff: angleDiff * 180 / Math.PI, 
@@ -217,6 +221,16 @@ io.on('connection', (socket) => {
                 }
             }
         }
+    });
+
+    // Handle attack animations (broadcast to other players)
+    socket.on('attackAnimation', (data) => {
+        // Broadcast attack animation to all other players
+        socket.broadcast.emit('attackAnimation', {
+            playerId: socket.id,
+            angle: data.angle,
+            timestamp: data.timestamp
+        });
     });
 
     // Handle respawn
